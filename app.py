@@ -43,155 +43,90 @@ os.makedirs(CERT_DIR, exist_ok=True)
 # Page config & modern theme
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="DV Analytics — Certificate & Email Suite",
-    page_icon="🎓",
+    page_title="DV Analytics â€” Certificate & Email Suite",
+    page_icon="ðŸŽ“",
     layout="wide",
 )
 
 
 # ---------------------------------------------------------------------------
-# Login gate — must run before any other UI renders
+# Login gate â€” must run before any other UI renders
 # ---------------------------------------------------------------------------
 def login():
     st.markdown(
         """
         <style>
-        [data-testid="stHeader"] { background: transparent; }
-        [data-testid="stToolbar"] { display: none; }
-        #MainMenu { visibility: hidden; }
-        footer { visibility: hidden; }
-
-        .stApp {
-            background:
-                radial-gradient(circle at 8% 82%, rgba(0, 183, 255, .24), transparent 27%),
-                radial-gradient(circle at 92% 78%, rgba(210, 40, 255, .23), transparent 30%),
-                radial-gradient(circle at 50% 0%, rgba(65, 93, 255, .16), transparent 38%),
-                linear-gradient(135deg, #03143f 0%, #071b4f 45%, #13052f 100%);
-            min-height: 100vh;
-        }
-        .block-container { max-width: 1120px !important; padding-top: 2.2rem !important; padding-bottom: 1rem !important; }
-        .login-top { display: flex; justify-content: flex-end; margin-bottom: 8px; }
-        .login-top-badge {
-            display: inline-flex; align-items: center; gap: 9px; padding: 9px 16px;
-            border: 1px solid rgba(255,255,255,.18); border-radius: 999px; color: #f5f7ff;
-            background: rgba(255,255,255,.06); font-size: 14px; backdrop-filter: blur(12px);
-        }
-        .brand-wrap { text-align: center; margin: 5px auto 28px; }
-        .dv-logo {
-            width: 72px; height: 72px; margin: 0 auto 18px; border-radius: 17px;
-            display: flex; align-items: center; justify-content: center; color: white;
-            font-size: 31px; font-weight: 800; letter-spacing: -2px;
-            background: linear-gradient(145deg, #102d6d, #071a48);
-            border: 1px solid rgba(255,255,255,.22);
-            box-shadow: 0 16px 40px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.12);
-            position: relative;
-        }
-        .dv-logo:after {
-            content: ""; position: absolute; right: -1px; top: -1px; width: 25px; height: 25px;
-            border-radius: 0 17px 0 17px; background: #ea1313;
-        }
-        .brand-title { color: #ffffff; font-size: clamp(30px, 4vw, 48px); line-height: 1.08; font-weight: 800; letter-spacing: -1.6px; margin: 0; }
-        .brand-subtitle { color: rgba(232,238,255,.74); font-size: 16px; margin-top: 10px; }
-        .login-card {
-            max-width: 665px; margin: 0 auto; padding: 34px 36px 30px; border-radius: 22px;
-            background: linear-gradient(145deg, rgba(255,255,255,.105), rgba(255,255,255,.045));
-            border: 1px solid rgba(255,255,255,.18);
-            box-shadow: 0 28px 80px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.08);
-            backdrop-filter: blur(22px);
-        }
-        .lock-circle {
-            width: 76px; height: 76px; margin: 0 auto 17px; border-radius: 50%;
-            display: flex; align-items: center; justify-content: center; font-size: 32px;
-            background: linear-gradient(135deg, #126cff, #a832ff);
-            box-shadow: 0 0 0 10px rgba(62,102,255,.08), 0 12px 35px rgba(39,75,255,.38);
-        }
-        .welcome-title { text-align: center; color: #ffffff; font-size: 28px; font-weight: 750; margin: 0; }
-        .welcome-text { text-align: center; color: rgba(232,238,255,.72); margin: 7px 0 25px; font-size: 15px; }
-        .stTextInput > label { color: #f4f7ff !important; font-weight: 600 !important; font-size: 14px !important; }
-        .stTextInput > div > div {
-            background: rgba(4,15,48,.42) !important; border: 1px solid rgba(255,255,255,.17) !important;
-            border-radius: 12px !important; min-height: 54px !important; transition: .2s ease;
-        }
-        .stTextInput > div > div:focus-within { border-color: #3b8cff !important; box-shadow: 0 0 0 3px rgba(59,140,255,.14) !important; }
-        .stTextInput input { color: #ffffff !important; font-size: 15px !important; }
-        .stTextInput input::placeholder { color: rgba(255,255,255,.40) !important; }
-        .login-actions { display: flex; justify-content: space-between; align-items: center; color: rgba(238,243,255,.74); font-size: 13px; margin: 2px 2px 18px; }
-        .remember { display: flex; gap: 7px; align-items: center; }
-        .secure-line { display: flex; align-items: center; gap: 14px; color: rgba(236,242,255,.82); margin-top: 24px; }
-        .secure-line:before, .secure-line:after { content: ""; height: 1px; flex: 1; background: rgba(255,255,255,.15); }
-        .secure-content { display: flex; align-items: center; gap: 12px; margin-top: 20px; padding: 13px 14px; border-radius: 12px; background: rgba(4,19,55,.28); color: rgba(235,241,255,.72); font-size: 13px; }
-        .secure-icon { font-size: 25px; }
-        .login-footer { text-align: center; color: rgba(225,233,255,.52); font-size: 12px; margin: 26px auto 5px; }
-        .help-footer { max-width: 665px; margin: 17px auto 0; padding: 15px 18px; border-top: 1px solid rgba(255,255,255,.10); display: flex; justify-content: space-between; color: rgba(230,237,255,.60); font-size: 13px; }
-        .stButton > button {
-            width: 100% !important; min-height: 54px !important; border: 0 !important; border-radius: 12px !important;
-            color: white !important; font-size: 16px !important; font-weight: 750 !important;
-            background: linear-gradient(90deg, #096dff 0%, #7140ff 55%, #a82cff 100%) !important;
-            box-shadow: 0 12px 30px rgba(62,78,255,.30) !important;
-            transition: transform .18s ease, box-shadow .18s ease !important;
-        }
-        .stButton > button:hover { transform: translateY(-1px); box-shadow: 0 16px 38px rgba(62,78,255,.42) !important; }
-        @media (max-width: 700px) {
-            .block-container { padding: 1rem !important; }
-            .login-card { padding: 25px 20px 23px; }
-            .brand-title { font-size: 31px; }
-            .help-footer { flex-direction: column; gap: 8px; text-align: center; }
-        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        #MainMenu, footer, [data-testid="stHeader"], [data-testid="stToolbar"] { display:none !important; }
+        html, body, [class*="css"] { font-family:'Inter',sans-serif; }
+        .stApp { background:#0b0b09; min-height:100vh; color:#fff; }
+        .block-container { max-width:1080px !important; padding:6vh 28px 30px !important; }
+        .lamp-heading { text-align:center; margin-bottom:34px; }
+        .lamp-heading h1 { margin:0; color:#f7f7f3; font-size:clamp(32px,4.5vw,54px); letter-spacing:-2px; font-weight:500; }
+        .lamp-heading h1 span { color:#ffe000; font-weight:600; }
+        .lamp-heading p { color:#88877f; margin:10px 0 0; font-size:14px; letter-spacing:.06em; text-transform:uppercase; }
+        [data-testid="stHorizontalBlock"] { align-items:center; gap:3rem; }
+        .lamp-stage { height:470px; position:relative; overflow:hidden; }
+        .lamp-glow { position:absolute; width:390px; height:390px; left:50%; top:77px; transform:translateX(-50%); background:radial-gradient(ellipse at 50% 15%,rgba(255,225,92,.42),rgba(255,212,55,.12) 43%,transparent 70%); filter:blur(5px); animation:breathe 3s ease-in-out infinite; }
+        .light-cone { position:absolute; left:50%; top:126px; transform:translateX(-50%); width:330px; height:285px; background:linear-gradient(100deg,transparent 3%,rgba(255,226,116,.30) 48%,rgba(255,240,162,.17) 75%,transparent 97%); clip-path:polygon(39% 0,61% 0,100% 100%,0 100%); filter:blur(2px); }
+        .shade { position:absolute; z-index:3; left:50%; top:94px; transform:translateX(-50%); width:155px; height:55px; border-radius:80px 80px 10px 10px; background:linear-gradient(#080807,#181711); border-bottom:5px solid #5f5633; box-shadow:0 8px 28px rgba(255,220,65,.33); }
+        .stem { position:absolute; z-index:3; left:calc(50% - 3px); top:146px; width:6px; height:239px; background:linear-gradient(90deg,#171714,#75705c,#151513); }
+        .base { position:absolute; z-index:4; left:50%; top:382px; transform:translateX(-50%); width:142px; height:12px; border-radius:50%; background:#11110f; box-shadow:0 3px 12px #000; }
+        .cord { position:absolute; z-index:4; left:calc(50% + 51px); top:136px; width:2px; height:75px; background:#93865c; transform-origin:top; animation:sway 3.2s ease-in-out infinite; }
+        .cord:after { content:''; position:absolute; left:-5px; bottom:-12px; width:12px; height:17px; border-radius:50%; background:#cbb96f; box-shadow:inset 2px 0 4px #746a42; }
+        .fly { position:absolute; z-index:5; width:5px; height:5px; border-radius:50%; background:#fff26a; box-shadow:0 0 5px #fff400,0 0 12px #d4ff00; animation:float 5s ease-in-out infinite; }
+        .f1{left:16%;top:17%;}.f2{left:77%;top:25%;animation-delay:-1s}.f3{left:25%;top:70%;animation-delay:-2.2s}.f4{left:83%;top:74%;animation-delay:-3.4s}.f5{left:67%;top:51%;animation-delay:-4s}
+        [data-testid="stForm"] { background:linear-gradient(145deg,rgba(35,35,32,.98),rgba(23,23,21,.96)); border:1px solid #3c3b35; border-radius:22px; padding:32px 30px 26px; box-shadow:0 25px 65px rgba(0,0,0,.55),inset 0 1px rgba(255,255,255,.04); }
+        .card-head h2 { margin:0; font-size:30px; color:#fff; letter-spacing:-1px; }
+        .card-head p { margin:7px 0 22px; color:#8f8e87; font-size:13px; }
+        .stTextInput label { color:#b9b8b1 !important; font-size:12px !important; font-weight:600 !important; }
+        .stTextInput [data-baseweb="input"] { background:#151513 !important; border:1px solid #292925 !important; border-radius:10px !important; min-height:49px; }
+        .stTextInput [data-baseweb="input"]:focus-within { border-color:#ffe000 !important; box-shadow:0 0 0 2px rgba(255,224,0,.12) !important; }
+        .stTextInput input { color:#f7f7f3 !important; -webkit-text-fill-color:#f7f7f3 !important; }
+        .stTextInput input::placeholder { color:#565650 !important; }
+        .login-actions { display:flex; justify-content:space-between; color:#77766f; font-size:12px; margin:0 2px 13px; }
+        [data-testid="stFormSubmitButton"] button { width:100%; min-height:50px; border:0; border-radius:10px; background:#ffe000; color:#13130f; font-size:15px; font-weight:800; box-shadow:0 8px 22px rgba(255,224,0,.18); transition:.2s; }
+        [data-testid="stFormSubmitButton"] button:hover { background:#ffea3b; color:#000; transform:translateY(-1px); box-shadow:0 11px 28px rgba(255,224,0,.27); }
+        .secure-note { text-align:center; color:#62615b; font-size:11px; margin-top:18px; }
+        .login-footer { text-align:center; color:#4f4e49; font-size:11px; margin-top:28px; }
+        @keyframes breathe{50%{opacity:.72;transform:translateX(-50%) scale(.96)}}
+        @keyframes sway{50%{transform:rotate(3deg)}}
+        @keyframes float{0%,100%{transform:translate(0,0);opacity:.35}50%{transform:translate(18px,-24px);opacity:1}}
+        @media(max-width:760px){.block-container{padding:30px 18px !important}.lamp-heading{margin-bottom:8px}.lamp-stage{height:280px}.shade{top:35px}.lamp-glow{top:20px;height:270px}.light-cone{top:67px;height:190px;width:260px}.stem{top:87px;height:150px}.base{top:234px}.cord{top:77px}.lamp-heading h1{font-size:35px}[data-testid="stHorizontalBlock"]{gap:.5rem}[data-testid="stForm"]{padding:26px 20px 22px}}
         </style>
-
-        <div class="login-top"><div class="login-top-badge">◐ &nbsp; Secure Login</div></div>
-        <div class="brand-wrap">
-            <div class="dv-logo">DV</div>
-            <div class="brand-title">Certificate Email Automation</div>
-            <div class="brand-subtitle">Automated certificate generation and email delivery</div>
-        </div>
-        <div class="login-card">
-            <div class="lock-circle">🔒</div>
-            <div class="welcome-title">Welcome Back!</div>
-            <div class="welcome-text">Please sign in to continue to your dashboard</div>
-        </div>
+        <div class="lamp-heading"><h1>Lamp Login <span>V2</span></h1><p>DV Analytics Â· Certificate Automation</p></div>
         """,
         unsafe_allow_html=True,
     )
 
-    username = st.text_input("Username", value="", placeholder="Enter your email address", key="login_username")
-    password = st.text_input("Password", type="password", placeholder="Enter your password", key="login_password")
+    lamp_col, form_col = st.columns([1.12, 1], gap="large")
+    with lamp_col:
+        st.markdown('''<div class="lamp-stage"><div class="lamp-glow"></div><div class="light-cone"></div><div class="shade"></div><div class="stem"></div><div class="base"></div><div class="cord"></div><i class="fly f1"></i><i class="fly f2"></i><i class="fly f3"></i><i class="fly f4"></i><i class="fly f5"></i></div>''', unsafe_allow_html=True)
 
-    st.markdown(
-        '<div class="login-actions"><span class="remember">✓ &nbsp; Keep me signed in</span>'
-        '<span>Secure access</span></div>',
-        unsafe_allow_html=True,
-    )
+    with form_col:
+        with st.form("login_form", clear_on_submit=False):
+            st.markdown('<div class="card-head"><h2>Welcome Back</h2><p>Enter your details to access your account</p></div>', unsafe_allow_html=True)
+            username = st.text_input("USERNAME", placeholder="Enter your username", key="login_username")
+            password = st.text_input("PASSWORD", type="password", placeholder="Enter your password", key="login_password")
+            st.markdown('<div class="login-actions"><span>âœ“ &nbsp;Secure session</span><span>Authorized access only</span></div>', unsafe_allow_html=True)
+            submitted = st.form_submit_button("Sign In", use_container_width=True)
+            st.markdown('<div class="secure-note">ðŸ”’ Your connection is protected</div>', unsafe_allow_html=True)
 
-    if st.button("🚀  Login", key="login_button"):
-        # Credentials come from Streamlit secrets / environment variables only —
+    if submitted:
+        # Credentials come from Streamlit secrets / environment variables only â€”
         # never hardcoded in source, since this repo is public on GitHub.
         valid_username = os.environ.get("APP_USERNAME", "")
         valid_password = os.environ.get("APP_PASSWORD", "")
 
         if not valid_username or not valid_password:
-            st.error("⚠️ Login is not configured. Set APP_USERNAME and APP_PASSWORD in secrets.")
+            st.error("âš ï¸ Login is not configured. Set APP_USERNAME and APP_PASSWORD in secrets.")
         elif username == valid_username and password == valid_password:
             st.session_state["logged_in"] = True
             st.rerun()
         else:
-            st.error("❌ Invalid username or password")
+            st.error("âŒ Invalid username or password")
 
-    st.markdown(
-        """
-        <div class="secure-line">Secure Access</div>
-        <div class="secure-content">
-            <span class="secure-icon">🛡️</span>
-            <div>
-                <strong style="color:#eef4ff;">Your connection is protected</strong><br>
-                <span>Authorized access only · DV Analytics Certificate & Email Suite</span>
-            </div>
-        </div>
-        <div class="login-footer">© 2026 DV Analytics · Certificate &amp; Email Automation Suite</div>
-        <div class="help-footer"><span>DV Analytics</span><span>Need help? Contact your administrator</span></div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown('<div class="login-footer">Â© 2026 DV Analytics Â· Certificate &amp; Email Automation Suite</div>', unsafe_allow_html=True)
 
     return st.session_state.get("logged_in", False)
 
@@ -417,32 +352,32 @@ for k, v in defaults.items():
         st.session_state[k] = v
 
 # ---------------------------------------------------------------------------
-# Sidebar — SMTP status
+# Sidebar â€” SMTP status
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("#### ✉️ SMTP status")
+    st.markdown("#### âœ‰ï¸ SMTP status")
     cfg = SMTPConfig()
     if cfg.is_configured():
-        st.markdown('<span class="dv-badge dv-badge-ok">● Connected</span>', unsafe_allow_html=True)
+        st.markdown('<span class="dv-badge dv-badge-ok">â— Connected</span>', unsafe_allow_html=True)
         st.caption(f"{cfg.username}\nvia {cfg.host}:{cfg.port}")
     else:
-        st.markdown('<span class="dv-badge dv-badge-warn">● Not configured</span>', unsafe_allow_html=True)
+        st.markdown('<span class="dv-badge dv-badge-warn">â— Not configured</span>', unsafe_allow_html=True)
         st.caption(
             "Set **SMTP_EMAIL** and **SMTP_PASSWORD** as environment variables / "
             "Streamlit secrets. Gmail requires an **App Password**, not your normal login."
         )
     st.divider()
-    st.caption("DV Analytics · Certificate & Email Suite")
+    st.caption("DV Analytics Â· Certificate & Email Suite")
 
 tab1, tab2, tab3, tab4 = st.tabs(
-    ["①  Upload", "②  Generate", "③  Send", "④  Dashboard"]
+    ["â‘   Upload", "â‘¡  Generate", "â‘¢  Send", "â‘£  Dashboard"]
 )
 
 # ---------------------------------------------------------------------------
-# TAB 1 — Upload
+# TAB 1 â€” Upload
 # ---------------------------------------------------------------------------
 with tab1:
-    card_start("Participant list", "Required fields: Name, Mobile Number, Email ID — headers are matched flexibly.")
+    card_start("Participant list", "Required fields: Name, Mobile Number, Email ID â€” headers are matched flexibly.")
     excel_file = st.file_uploader("Excel file (.xlsx)", type=["xlsx"], label_visibility="collapsed")
 
     if excel_file:
@@ -455,15 +390,15 @@ with tab1:
                 records = normalize_records(df, column_map)
                 st.session_state.records = records
                 st.session_state.column_map = column_map
-                mapping_str = " · ".join(f"{k} → `{v}`" for k, v in column_map.items())
-                st.markdown(f'<span class="dv-badge dv-badge-ok">✓ {len(records)} records validated</span>', unsafe_allow_html=True)
+                mapping_str = " Â· ".join(f"{k} â†’ `{v}`" for k, v in column_map.items())
+                st.markdown(f'<span class="dv-badge dv-badge-ok">âœ“ {len(records)} records validated</span>', unsafe_allow_html=True)
                 st.caption(mapping_str)
                 st.dataframe(pd.DataFrame(records), use_container_width=True, height=220)
         except Exception as e:
             st.error(f"Could not read Excel file: {e}")
     card_end()
 
-    card_start("Certificate template", "PNG, JPG, or PDF — the name is drawn centered on top of this image.")
+    card_start("Certificate template", "PNG, JPG, or PDF â€” the name is drawn centered on top of this image.")
     template_file = st.file_uploader("Certificate template", type=["png", "jpg", "jpeg", "pdf"], label_visibility="collapsed")
 
     if template_file:
@@ -488,18 +423,18 @@ with tab1:
             st.session_state.font_size = suggested_size
             st.session_state.text_color_hex = "#%02x%02x%02x" % suggested_color
             st.session_state.confirmed_params = None
-            st.markdown('<span class="dv-badge dv-badge-ok">✓ Template uploaded — name placement auto-detected</span>', unsafe_allow_html=True)
+            st.markdown('<span class="dv-badge dv-badge-ok">âœ“ Template uploaded â€” name placement auto-detected</span>', unsafe_allow_html=True)
         else:
-            st.markdown('<span class="dv-badge dv-badge-ok">✓ Template uploaded</span>', unsafe_allow_html=True)
+            st.markdown('<span class="dv-badge dv-badge-ok">âœ“ Template uploaded</span>', unsafe_allow_html=True)
 
-        with st.expander("🎨 Customize name placement, size & color", expanded=False):
+        with st.expander("ðŸŽ¨ Customize name placement, size & color", expanded=False):
             c1, c2 = st.columns(2)
             with c1:
                 font_size = st.slider("Font size (px)", 20, 300, key="font_size")
                 y_pos = st.slider("Vertical position (% down)", 0, 100, key="y_pos_pct") / 100.0
             with c2:
                 color_hex = st.color_picker("Text color", key="text_color_hex")
-                if st.button("↺ Auto-fit to this template"):
+                if st.button("â†º Auto-fit to this template"):
                     s_y = suggest_name_position(template_img)
                     s_size, s_color = suggest_text_style(template_img, s_y)
                     st.session_state.y_pos_pct = int(round(s_y * 100))
@@ -518,11 +453,11 @@ with tab1:
             preview_img = render_certificate_image(
                 template_img, sample_name, None, font_size, text_color, y_pos
             )
-            st.image(preview_img, caption=f"Live preview — {sample_name}", use_container_width=True)
+            st.image(preview_img, caption=f"Live preview â€” {sample_name}", use_container_width=True)
 
             current_params = (fingerprint, font_size, round(y_pos, 3), color_hex)
             confirmed = st.checkbox(
-                "✅ I can clearly see the name above on the certificate",
+                "âœ… I can clearly see the name above on the certificate",
                 value=(st.session_state.confirmed_params == current_params),
             )
             if confirmed:
@@ -534,7 +469,7 @@ with tab1:
     card_end()
 
 # ---------------------------------------------------------------------------
-# TAB 2 — Generate Certificates
+# TAB 2 â€” Generate Certificates
 # ---------------------------------------------------------------------------
 with tab2:
     card_start("Generate certificates")
@@ -557,11 +492,11 @@ with tab2:
 
     disabled = not (records and template_path)
     if disabled:
-        st.info("Upload both the participant list and the certificate template in Step ① first.")
+        st.info("Upload both the participant list and the certificate template in Step â‘  first.")
     elif not preview_confirmed:
-        st.warning("Go back to Step ① and confirm the name preview looks correct before generating in bulk.")
+        st.warning("Go back to Step â‘  and confirm the name preview looks correct before generating in bulk.")
 
-    if st.button("🎓  Generate Certificates", disabled=disabled or not preview_confirmed, key="btn_generate"):
+    if st.button("ðŸŽ“  Generate Certificates", disabled=disabled or not preview_confirmed, key="btn_generate"):
         template_img = load_template_as_image(template_path)
         progress = st.progress(0, text="Starting...")
         used_names = {}
@@ -579,11 +514,11 @@ with tab2:
             except Exception as e:
                 cert_paths[name] = None
                 log_event(rec.get("Email ID", ""), "CERT_GENERATION_FAILED", str(e))
-            progress.progress((i + 1) / len(records), text=f"Generating {i+1} of {len(records)} — {name}")
+            progress.progress((i + 1) / len(records), text=f"Generating {i+1} of {len(records)} â€” {name}")
         st.session_state.cert_paths = cert_paths
         progress.empty()
         ok_count = sum(1 for v in cert_paths.values() if v)
-        st.success(f"Done — {ok_count} of {len(records)} certificates generated.")
+        st.success(f"Done â€” {ok_count} of {len(records)} certificates generated.")
 
     if st.session_state.cert_paths:
         st.markdown("**Review**")
@@ -595,12 +530,12 @@ with tab2:
 
         sample_paths = [p for p in st.session_state.cert_paths.values() if p]
         if sample_paths:
-            with st.expander("🔍 Preview a generated certificate"):
+            with st.expander("ðŸ” Preview a generated certificate"):
                 st.image(load_template_as_image(sample_paths[0]), use_container_width=True)
     card_end()
 
 # ---------------------------------------------------------------------------
-# TAB 3 — Send Certificates
+# TAB 3 â€” Send Certificates
 # ---------------------------------------------------------------------------
 with tab3:
     card_start("Compose email")
@@ -637,11 +572,11 @@ with tab3:
 
     can_send = bool(records) and bool(cert_paths) and SMTPConfig().is_configured()
     if not records or not cert_paths:
-        st.info("Generate certificates in Step ② before sending.")
+        st.info("Generate certificates in Step â‘¡ before sending.")
     elif not SMTPConfig().is_configured():
-        st.warning("SMTP is not configured — see the sidebar.")
+        st.warning("SMTP is not configured â€” see the sidebar.")
 
-    if st.button("✉️  Send Certificates", disabled=not can_send, key="btn_send"):
+    if st.button("âœ‰ï¸  Send Certificates", disabled=not can_send, key="btn_send"):
         progress = st.progress(0, text="Starting...")
         results = []
         sender = EmailSender()
@@ -666,7 +601,7 @@ with tab3:
                 "Error Message": "",
             }
 
-            progress.progress((i + 1) / total, text=f"Sending {i+1} of {total} — {name}")
+            progress.progress((i + 1) / total, text=f"Sending {i+1} of {total} â€” {name}")
 
             if not cert_path:
                 row["Error Message"] = "Certificate not generated"
@@ -707,12 +642,12 @@ with tab3:
         errors_df.to_excel(ERROR_REPORT_PATH, index=False)
 
         n_sent = sum(1 for r in results if r["Email Sent"] == "Yes")
-        st.success(f"Done — {n_sent} of {total} emails sent successfully.")
+        st.success(f"Done â€” {n_sent} of {total} emails sent successfully.")
         st.rerun()
     card_end()
 
 # ---------------------------------------------------------------------------
-# TAB 4 — Report & Dashboard
+# TAB 4 â€” Report & Dashboard
 # ---------------------------------------------------------------------------
 with tab4:
     card_start("Dashboard")
@@ -745,32 +680,32 @@ with tab4:
                 for name, path in cert_paths.items():
                     if path and os.path.exists(path):
                         zf.write(path, arcname=os.path.basename(path))
-            st.download_button("⬇️ Certificates (.zip)", buf.getvalue(), file_name="Certificates.zip", mime="application/zip")
+            st.download_button("â¬‡ï¸ Certificates (.zip)", buf.getvalue(), file_name="Certificates.zip", mime="application/zip")
         else:
-            st.button("⬇️ Certificates (.zip)", disabled=True)
+            st.button("â¬‡ï¸ Certificates (.zip)", disabled=True)
 
     with dl2:
         if os.path.exists(REPORT_PATH):
             with open(REPORT_PATH, "rb") as f:
-                st.download_button("⬇️ Email Report", f.read(), file_name="Email_Sending_Report.xlsx",
+                st.download_button("â¬‡ï¸ Email Report", f.read(), file_name="Email_Sending_Report.xlsx",
                                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         else:
-            st.button("⬇️ Email Report", disabled=True)
+            st.button("â¬‡ï¸ Email Report", disabled=True)
 
     with dl3:
         if os.path.exists(ERROR_REPORT_PATH):
             with open(ERROR_REPORT_PATH, "rb") as f:
-                st.download_button("⬇️ Error Report", f.read(), file_name="Error_Report.xlsx",
+                st.download_button("â¬‡ï¸ Error Report", f.read(), file_name="Error_Report.xlsx",
                                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         else:
-            st.button("⬇️ Error Report", disabled=True)
+            st.button("â¬‡ï¸ Error Report", disabled=True)
 
     with dl4:
         if os.path.exists(LOG_PATH):
             with open(LOG_PATH, "rb") as f:
-                st.download_button("⬇️ Log File", f.read(), file_name="email_log.txt")
+                st.download_button("â¬‡ï¸ Log File", f.read(), file_name="email_log.txt")
         else:
-            st.button("⬇️ Log File", disabled=True)
+            st.button("â¬‡ï¸ Log File", disabled=True)
     card_end()
 
     if results:
