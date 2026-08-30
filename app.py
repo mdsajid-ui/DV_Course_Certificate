@@ -43,14 +43,14 @@ os.makedirs(CERT_DIR, exist_ok=True)
 # Page config & modern theme
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="DV Analytics â€” Certificate & Email Suite",
-    page_icon="ðŸŽ“",
+    page_title="DV Analytics — Certificate & Email Suite",
+    page_icon="🎓",
     layout="wide",
 )
 
 
 # ---------------------------------------------------------------------------
-# Login gate â€” must run before any other UI renders
+# Login gate — must run before any other UI renders
 # ---------------------------------------------------------------------------
 def login():
     st.markdown(
@@ -94,7 +94,7 @@ def login():
         @keyframes float{0%,100%{transform:translate(0,0);opacity:.35}50%{transform:translate(18px,-24px);opacity:1}}
         @media(max-width:760px){.block-container{padding:30px 18px !important}.lamp-heading{margin-bottom:8px}.lamp-stage{height:280px}.shade{top:35px}.lamp-glow{top:20px;height:270px}.light-cone{top:67px;height:190px;width:260px}.stem{top:87px;height:150px}.base{top:234px}.cord{top:77px}.lamp-heading h1{font-size:35px}[data-testid="stHorizontalBlock"]{gap:.5rem}[data-testid="stForm"]{padding:26px 20px 22px}}
         </style>
-        <div class="lamp-heading"><h1>Lamp Login <span>V2</span></h1><p>DV Analytics Â· Certificate Automation</p></div>
+        <div class="lamp-heading"><h1>Lamp Login <span>V2</span></h1><p>DV Analytics · Certificate Automation</p></div>
         """,
         unsafe_allow_html=True,
     )
@@ -108,25 +108,25 @@ def login():
             st.markdown('<div class="card-head"><h2>Welcome Back</h2><p>Enter your details to access your account</p></div>', unsafe_allow_html=True)
             username = st.text_input("USERNAME", placeholder="Enter your username", key="login_username")
             password = st.text_input("PASSWORD", type="password", placeholder="Enter your password", key="login_password")
-            st.markdown('<div class="login-actions"><span>âœ“ &nbsp;Secure session</span><span>Authorized access only</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="login-actions"><span>✓ &nbsp;Secure session</span><span>Authorized access only</span></div>', unsafe_allow_html=True)
             submitted = st.form_submit_button("Sign In", use_container_width=True)
-            st.markdown('<div class="secure-note">ðŸ”’ Your connection is protected</div>', unsafe_allow_html=True)
+            st.markdown('<div class="secure-note">🔒 Your connection is protected</div>', unsafe_allow_html=True)
 
     if submitted:
-        # Credentials come from Streamlit secrets / environment variables only â€”
+        # Credentials come from Streamlit secrets / environment variables only —
         # never hardcoded in source, since this repo is public on GitHub.
         valid_username = os.environ.get("APP_USERNAME", "")
         valid_password = os.environ.get("APP_PASSWORD", "")
 
         if not valid_username or not valid_password:
-            st.error("âš ï¸ Login is not configured. Set APP_USERNAME and APP_PASSWORD in secrets.")
+            st.error("⚠️ Login is not configured. Set APP_USERNAME and APP_PASSWORD in secrets.")
         elif username == valid_username and password == valid_password:
             st.session_state["logged_in"] = True
             st.rerun()
         else:
-            st.error("âŒ Invalid username or password")
+            st.error("❌ Invalid username or password")
 
-    st.markdown('<div class="login-footer">Â© 2026 DV Analytics Â· Certificate &amp; Email Automation Suite</div>', unsafe_allow_html=True)
+    st.markdown('<div class="login-footer">© 2026 DV Analytics · Certificate &amp; Email Automation Suite</div>', unsafe_allow_html=True)
 
     return st.session_state.get("logged_in", False)
 
@@ -352,32 +352,32 @@ for k, v in defaults.items():
         st.session_state[k] = v
 
 # ---------------------------------------------------------------------------
-# Sidebar â€” SMTP status
+# Sidebar — SMTP status
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("#### âœ‰ï¸ SMTP status")
+    st.markdown("#### ✉️ SMTP status")
     cfg = SMTPConfig()
     if cfg.is_configured():
-        st.markdown('<span class="dv-badge dv-badge-ok">â— Connected</span>', unsafe_allow_html=True)
+        st.markdown('<span class="dv-badge dv-badge-ok">● Connected</span>', unsafe_allow_html=True)
         st.caption(f"{cfg.username}\nvia {cfg.host}:{cfg.port}")
     else:
-        st.markdown('<span class="dv-badge dv-badge-warn">â— Not configured</span>', unsafe_allow_html=True)
+        st.markdown('<span class="dv-badge dv-badge-warn">● Not configured</span>', unsafe_allow_html=True)
         st.caption(
             "Set **SMTP_EMAIL** and **SMTP_PASSWORD** as environment variables / "
             "Streamlit secrets. Gmail requires an **App Password**, not your normal login."
         )
     st.divider()
-    st.caption("DV Analytics Â· Certificate & Email Suite")
+    st.caption("DV Analytics · Certificate & Email Suite")
 
 tab1, tab2, tab3, tab4 = st.tabs(
-    ["â‘   Upload", "â‘¡  Generate", "â‘¢  Send", "â‘£  Dashboard"]
+    ["①  Upload", "②  Generate", "③  Send", "④  Dashboard"]
 )
 
 # ---------------------------------------------------------------------------
-# TAB 1 â€” Upload
+# TAB 1 — Upload
 # ---------------------------------------------------------------------------
 with tab1:
-    card_start("Participant list", "Required fields: Name, Mobile Number, Email ID â€” headers are matched flexibly.")
+    card_start("Participant list", "Required fields: Name, Mobile Number, Email ID — headers are matched flexibly.")
     excel_file = st.file_uploader("Excel file (.xlsx)", type=["xlsx"], label_visibility="collapsed")
 
     if excel_file:
@@ -390,15 +390,15 @@ with tab1:
                 records = normalize_records(df, column_map)
                 st.session_state.records = records
                 st.session_state.column_map = column_map
-                mapping_str = " Â· ".join(f"{k} â†’ `{v}`" for k, v in column_map.items())
-                st.markdown(f'<span class="dv-badge dv-badge-ok">âœ“ {len(records)} records validated</span>', unsafe_allow_html=True)
+                mapping_str = " · ".join(f"{k} → `{v}`" for k, v in column_map.items())
+                st.markdown(f'<span class="dv-badge dv-badge-ok">✓ {len(records)} records validated</span>', unsafe_allow_html=True)
                 st.caption(mapping_str)
                 st.dataframe(pd.DataFrame(records), use_container_width=True, height=220)
         except Exception as e:
             st.error(f"Could not read Excel file: {e}")
     card_end()
 
-    card_start("Certificate template", "PNG, JPG, or PDF â€” the name is drawn centered on top of this image.")
+    card_start("Certificate template", "PNG, JPG, or PDF — the name is drawn centered on top of this image.")
     template_file = st.file_uploader("Certificate template", type=["png", "jpg", "jpeg", "pdf"], label_visibility="collapsed")
 
     if template_file:
@@ -423,18 +423,18 @@ with tab1:
             st.session_state.font_size = suggested_size
             st.session_state.text_color_hex = "#%02x%02x%02x" % suggested_color
             st.session_state.confirmed_params = None
-            st.markdown('<span class="dv-badge dv-badge-ok">âœ“ Template uploaded â€” name placement auto-detected</span>', unsafe_allow_html=True)
+            st.markdown('<span class="dv-badge dv-badge-ok">✓ Template uploaded — name placement auto-detected</span>', unsafe_allow_html=True)
         else:
-            st.markdown('<span class="dv-badge dv-badge-ok">âœ“ Template uploaded</span>', unsafe_allow_html=True)
+            st.markdown('<span class="dv-badge dv-badge-ok">✓ Template uploaded</span>', unsafe_allow_html=True)
 
-        with st.expander("ðŸŽ¨ Customize name placement, size & color", expanded=False):
+        with st.expander("🎨 Customize name placement, size & color", expanded=False):
             c1, c2 = st.columns(2)
             with c1:
                 font_size = st.slider("Font size (px)", 20, 300, key="font_size")
                 y_pos = st.slider("Vertical position (% down)", 0, 100, key="y_pos_pct") / 100.0
             with c2:
                 color_hex = st.color_picker("Text color", key="text_color_hex")
-                if st.button("â†º Auto-fit to this template"):
+                if st.button("↺ Auto-fit to this template"):
                     s_y = suggest_name_position(template_img)
                     s_size, s_color = suggest_text_style(template_img, s_y)
                     st.session_state.y_pos_pct = int(round(s_y * 100))
@@ -453,11 +453,11 @@ with tab1:
             preview_img = render_certificate_image(
                 template_img, sample_name, None, font_size, text_color, y_pos
             )
-            st.image(preview_img, caption=f"Live preview â€” {sample_name}", use_container_width=True)
+            st.image(preview_img, caption=f"Live preview — {sample_name}", use_container_width=True)
 
             current_params = (fingerprint, font_size, round(y_pos, 3), color_hex)
             confirmed = st.checkbox(
-                "âœ… I can clearly see the name above on the certificate",
+                "✅ I can clearly see the name above on the certificate",
                 value=(st.session_state.confirmed_params == current_params),
             )
             if confirmed:
@@ -469,7 +469,7 @@ with tab1:
     card_end()
 
 # ---------------------------------------------------------------------------
-# TAB 2 â€” Generate Certificates
+# TAB 2 — Generate Certificates
 # ---------------------------------------------------------------------------
 with tab2:
     card_start("Generate certificates")
@@ -492,11 +492,11 @@ with tab2:
 
     disabled = not (records and template_path)
     if disabled:
-        st.info("Upload both the participant list and the certificate template in Step â‘  first.")
+        st.info("Upload both the participant list and the certificate template in Step ① first.")
     elif not preview_confirmed:
-        st.warning("Go back to Step â‘  and confirm the name preview looks correct before generating in bulk.")
+        st.warning("Go back to Step ① and confirm the name preview looks correct before generating in bulk.")
 
-    if st.button("ðŸŽ“  Generate Certificates", disabled=disabled or not preview_confirmed, key="btn_generate"):
+    if st.button("🎓  Generate Certificates", disabled=disabled or not preview_confirmed, key="btn_generate"):
         template_img = load_template_as_image(template_path)
         progress = st.progress(0, text="Starting...")
         used_names = {}
@@ -514,11 +514,11 @@ with tab2:
             except Exception as e:
                 cert_paths[name] = None
                 log_event(rec.get("Email ID", ""), "CERT_GENERATION_FAILED", str(e))
-            progress.progress((i + 1) / len(records), text=f"Generating {i+1} of {len(records)} â€” {name}")
+            progress.progress((i + 1) / len(records), text=f"Generating {i+1} of {len(records)} — {name}")
         st.session_state.cert_paths = cert_paths
         progress.empty()
         ok_count = sum(1 for v in cert_paths.values() if v)
-        st.success(f"Done â€” {ok_count} of {len(records)} certificates generated.")
+        st.success(f"Done — {ok_count} of {len(records)} certificates generated.")
 
     if st.session_state.cert_paths:
         st.markdown("**Review**")
@@ -530,12 +530,12 @@ with tab2:
 
         sample_paths = [p for p in st.session_state.cert_paths.values() if p]
         if sample_paths:
-            with st.expander("ðŸ” Preview a generated certificate"):
+            with st.expander("🔍 Preview a generated certificate"):
                 st.image(load_template_as_image(sample_paths[0]), use_container_width=True)
     card_end()
 
 # ---------------------------------------------------------------------------
-# TAB 3 â€” Send Certificates
+# TAB 3 — Send Certificates
 # ---------------------------------------------------------------------------
 with tab3:
     card_start("Compose email")
@@ -572,11 +572,11 @@ with tab3:
 
     can_send = bool(records) and bool(cert_paths) and SMTPConfig().is_configured()
     if not records or not cert_paths:
-        st.info("Generate certificates in Step â‘¡ before sending.")
+        st.info("Generate certificates in Step ② before sending.")
     elif not SMTPConfig().is_configured():
-        st.warning("SMTP is not configured â€” see the sidebar.")
+        st.warning("SMTP is not configured — see the sidebar.")
 
-    if st.button("âœ‰ï¸  Send Certificates", disabled=not can_send, key="btn_send"):
+    if st.button("✉️  Send Certificates", disabled=not can_send, key="btn_send"):
         progress = st.progress(0, text="Starting...")
         results = []
         sender = EmailSender()
@@ -601,7 +601,7 @@ with tab3:
                 "Error Message": "",
             }
 
-            progress.progress((i + 1) / total, text=f"Sending {i+1} of {total} â€” {name}")
+            progress.progress((i + 1) / total, text=f"Sending {i+1} of {total} — {name}")
 
             if not cert_path:
                 row["Error Message"] = "Certificate not generated"
@@ -642,12 +642,12 @@ with tab3:
         errors_df.to_excel(ERROR_REPORT_PATH, index=False)
 
         n_sent = sum(1 for r in results if r["Email Sent"] == "Yes")
-        st.success(f"Done â€” {n_sent} of {total} emails sent successfully.")
+        st.success(f"Done — {n_sent} of {total} emails sent successfully.")
         st.rerun()
     card_end()
 
 # ---------------------------------------------------------------------------
-# TAB 4 â€” Report & Dashboard
+# TAB 4 — Report & Dashboard
 # ---------------------------------------------------------------------------
 with tab4:
     card_start("Dashboard")
@@ -680,32 +680,32 @@ with tab4:
                 for name, path in cert_paths.items():
                     if path and os.path.exists(path):
                         zf.write(path, arcname=os.path.basename(path))
-            st.download_button("â¬‡ï¸ Certificates (.zip)", buf.getvalue(), file_name="Certificates.zip", mime="application/zip")
+            st.download_button("⬇️ Certificates (.zip)", buf.getvalue(), file_name="Certificates.zip", mime="application/zip")
         else:
-            st.button("â¬‡ï¸ Certificates (.zip)", disabled=True)
+            st.button("⬇️ Certificates (.zip)", disabled=True)
 
     with dl2:
         if os.path.exists(REPORT_PATH):
             with open(REPORT_PATH, "rb") as f:
-                st.download_button("â¬‡ï¸ Email Report", f.read(), file_name="Email_Sending_Report.xlsx",
+                st.download_button("⬇️ Email Report", f.read(), file_name="Email_Sending_Report.xlsx",
                                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         else:
-            st.button("â¬‡ï¸ Email Report", disabled=True)
+            st.button("⬇️ Email Report", disabled=True)
 
     with dl3:
         if os.path.exists(ERROR_REPORT_PATH):
             with open(ERROR_REPORT_PATH, "rb") as f:
-                st.download_button("â¬‡ï¸ Error Report", f.read(), file_name="Error_Report.xlsx",
+                st.download_button("⬇️ Error Report", f.read(), file_name="Error_Report.xlsx",
                                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         else:
-            st.button("â¬‡ï¸ Error Report", disabled=True)
+            st.button("⬇️ Error Report", disabled=True)
 
     with dl4:
         if os.path.exists(LOG_PATH):
             with open(LOG_PATH, "rb") as f:
-                st.download_button("â¬‡ï¸ Log File", f.read(), file_name="email_log.txt")
+                st.download_button("⬇️ Log File", f.read(), file_name="email_log.txt")
         else:
-            st.button("â¬‡ï¸ Log File", disabled=True)
+            st.button("⬇️ Log File", disabled=True)
     card_end()
 
     if results:
