@@ -67,8 +67,10 @@ def login():
         .lamp-heading p { color:#88877f; margin:10px 0 0; font-size:14px; letter-spacing:.06em; text-transform:uppercase; }
         [data-testid="stHorizontalBlock"] { align-items:center; gap:3rem; }
         .lamp-stage { height:470px; position:relative; overflow:hidden; }
-        .lamp-glow { position:absolute; width:390px; height:390px; left:50%; top:77px; transform:translateX(-50%); background:radial-gradient(ellipse at 50% 15%,rgba(255,225,92,.42),rgba(255,212,55,.12) 43%,transparent 70%); filter:blur(5px); animation:breathe 3s ease-in-out infinite; }
-        .light-cone { position:absolute; left:50%; top:126px; transform:translateX(-50%); width:330px; height:285px; background:linear-gradient(100deg,transparent 3%,rgba(255,226,116,.30) 48%,rgba(255,240,162,.17) 75%,transparent 97%); clip-path:polygon(39% 0,61% 0,100% 100%,0 100%); filter:blur(2px); }
+        .lamp-glow { position:absolute; width:390px; height:390px; left:50%; top:77px; transform:translateX(-50%); background:radial-gradient(ellipse at 50% 15%,rgba(255,225,92,.42),rgba(255,212,55,.12) 43%,transparent 70%); filter:blur(5px); animation:breathe 3s ease-in-out infinite; transition:opacity .35s ease; }
+        .light-cone { position:absolute; left:50%; top:126px; transform:translateX(-50%); width:330px; height:285px; background:linear-gradient(100deg,transparent 3%,rgba(255,226,116,.30) 48%,rgba(255,240,162,.17) 75%,transparent 97%); clip-path:polygon(39% 0,61% 0,100% 100%,0 100%); filter:blur(2px); transition:opacity .35s ease; }
+        .lamp-stage.lamp-off .lamp-glow, .lamp-stage.lamp-off .light-cone, .lamp-stage.lamp-off .fly { opacity:0 !important; animation:none; }
+        .lamp-stage.lamp-off .shade { border-bottom-color:#25251f; box-shadow:none; }
         .shade { position:absolute; z-index:3; left:50%; top:94px; transform:translateX(-50%); width:155px; height:55px; border-radius:80px 80px 10px 10px; background:linear-gradient(#080807,#181711); border-bottom:5px solid #5f5633; box-shadow:0 8px 28px rgba(255,220,65,.33); }
         .stem { position:absolute; z-index:3; left:calc(50% - 3px); top:146px; width:6px; height:239px; background:linear-gradient(90deg,#171714,#75705c,#151513); }
         .base { position:absolute; z-index:4; left:50%; top:382px; transform:translateX(-50%); width:142px; height:12px; border-radius:50%; background:#11110f; box-shadow:0 3px 12px #000; }
@@ -80,10 +82,13 @@ def login():
         .card-head h2 { margin:0; font-size:30px; color:#fff; letter-spacing:-1px; }
         .card-head p { margin:7px 0 22px; color:#8f8e87; font-size:13px; }
         .stTextInput label { color:#b9b8b1 !important; font-size:12px !important; font-weight:600 !important; }
-        .stTextInput [data-baseweb="input"] { background:#151513 !important; border:1px solid #292925 !important; border-radius:10px !important; min-height:49px; }
+        .stTextInput [data-baseweb="input"], .stTextInput [data-baseweb="base-input"], .stTextInput input { background-color:#151513 !important; border-color:#292925 !important; }
+        .stTextInput [data-baseweb="input"] { border:1px solid #292925 !important; border-radius:10px !important; min-height:49px; }
         .stTextInput [data-baseweb="input"]:focus-within { border-color:#ffe000 !important; box-shadow:0 0 0 2px rgba(255,224,0,.12) !important; }
-        .stTextInput input { color:#f7f7f3 !important; -webkit-text-fill-color:#f7f7f3 !important; }
+        .stTextInput input { color:#ffe76a !important; -webkit-text-fill-color:#ffe76a !important; caret-color:#ffe000 !important; opacity:1 !important; }
         .stTextInput input::placeholder { color:#565650 !important; }
+        [data-testid="stToggle"] { max-width:180px; margin:0 auto -8px; }
+        [data-testid="stToggle"] label p { color:#d8d6c8 !important; font-size:13px !important; font-weight:600 !important; }
         .login-actions { display:flex; justify-content:space-between; color:#77766f; font-size:12px; margin:0 2px 13px; }
         [data-testid="stFormSubmitButton"] button { width:100%; min-height:50px; border:0; border-radius:10px; background:#ffe000; color:#13130f; font-size:15px; font-weight:800; box-shadow:0 8px 22px rgba(255,224,0,.18); transition:.2s; }
         [data-testid="stFormSubmitButton"] button:hover { background:#ffea3b; color:#000; transform:translateY(-1px); box-shadow:0 11px 28px rgba(255,224,0,.27); }
@@ -94,14 +99,16 @@ def login():
         @keyframes float{0%,100%{transform:translate(0,0);opacity:.35}50%{transform:translate(18px,-24px);opacity:1}}
         @media(max-width:760px){.block-container{padding:30px 18px !important}.lamp-heading{margin-bottom:8px}.lamp-stage{height:280px}.shade{top:35px}.lamp-glow{top:20px;height:270px}.light-cone{top:67px;height:190px;width:260px}.stem{top:87px;height:150px}.base{top:234px}.cord{top:77px}.lamp-heading h1{font-size:35px}[data-testid="stHorizontalBlock"]{gap:.5rem}[data-testid="stForm"]{padding:26px 20px 22px}}
         </style>
-        <div class="lamp-heading"><h1>Lamp Login <span>V2</span></h1><p>DV Analytics · Certificate Automation</p></div>
+        <div class="lamp-heading"><h1>Certificate Email <span>Automation</span></h1><p>DV Analytics · Secure Sign In</p></div>
         """,
         unsafe_allow_html=True,
     )
 
     lamp_col, form_col = st.columns([1.12, 1], gap="large")
     with lamp_col:
-        st.markdown('''<div class="lamp-stage"><div class="lamp-glow"></div><div class="light-cone"></div><div class="shade"></div><div class="stem"></div><div class="base"></div><div class="cord"></div><i class="fly f1"></i><i class="fly f2"></i><i class="fly f3"></i><i class="fly f4"></i><i class="fly f5"></i></div>''', unsafe_allow_html=True)
+        lamp_on = st.toggle("Turn on lamp", value=True, key="login_lamp_on")
+        lamp_state = "lamp-on" if lamp_on else "lamp-off"
+        st.markdown(f'''<div class="lamp-stage {lamp_state}"><div class="lamp-glow"></div><div class="light-cone"></div><div class="shade"></div><div class="stem"></div><div class="base"></div><div class="cord"></div><i class="fly f1"></i><i class="fly f2"></i><i class="fly f3"></i><i class="fly f4"></i><i class="fly f5"></i></div>''', unsafe_allow_html=True)
 
     with form_col:
         with st.form("login_form", clear_on_submit=False):
