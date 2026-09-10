@@ -4,6 +4,7 @@
 # Generated at runtime
 output/
 email_log.txt
+data/
 
 # Python
 __pycache__/
