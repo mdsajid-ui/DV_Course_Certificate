@@ -134,7 +134,7 @@ def get_roster(
 
     headers = values[0]
     col_map = _match_columns(headers)
-    missing = [f for f in ("name", "email", "course") if f not in col_map]
+    missing = [f for f in ("name", "email") if f not in col_map]
     if missing:
         raise SheetAccessError(
             "Could not find required column(s): "
@@ -145,27 +145,26 @@ def get_roster(
     rows: List[RosterRow] = []
     for i, raw_row in enumerate(values[1:], start=2):
         def cell(field: str) -> Optional[str]:
-            idx = col_map.get(field)
-            if idx is None or idx >= len(raw_row):
+            if field not in col_map:
                 return None
-            v = raw_row[idx].strip()
-            return v or None
+            idx = col_map[field]
+            return raw_row[idx].strip() if idx < len(raw_row) else None
 
         name = cell("name")
         email = cell("email")
-        course = cell("course")
-        if not (name and email and course):
-            continue  # skip incomplete rows rather than failing the whole batch
+        if not name or not email:
+            continue
 
         rows.append(
             RosterRow(
                 row_number=i,
                 name=name,
                 email=email,
-                course=course,
+                course=cell("course") or "Unknown Course",
                 completion_date=cell("completion_date"),
                 status=cell("status"),
                 existing_certificate_number=cell("certificate_number"),
             )
         )
+
     return rows

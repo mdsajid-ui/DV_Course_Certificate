@@ -167,6 +167,7 @@ def issue_or_get_certificate_number(
     institute_code: str,
     course_code: str,
     year: str,
+    existing_number: Optional[str] = None,
 ) -> CertificateRecord:
     """
     Idempotent: if this (email, course) already has a certificate number,
@@ -181,8 +182,12 @@ def issue_or_get_certificate_number(
             return _row_to_record(row)
 
         bucket = f"{institute_code}|{course_code}|{year}"
-        seq = _next_sequence(conn, bucket)
-        cert_number = format_cert_number(institute_code, course_code, year, seq)
+        if existing_number:
+            cert_number = existing_number
+        else:
+            seq = _next_sequence(conn, bucket)
+            cert_number = format_cert_number(institute_code, course_code, year, seq)
+            
         now = datetime.now(timezone.utc).isoformat()
         conn.execute(
             """

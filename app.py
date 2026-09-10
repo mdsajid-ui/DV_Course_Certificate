@@ -780,9 +780,14 @@ with tab5:
     card_end()
 
     if st.session_state.sheet_roster:
-        card_start("Select students & send")
+        card_start("Select Course & Students")
+        
+        # Determine Course/Template to use
+        course_options = ["APIDA", "APIDIA", "APIDS"]
+        selected_course = st.selectbox("Select Course / Template", course_options, index=0)
+        
         roster = st.session_state.sheet_roster
-        options = {f"{r.name} — {r.course} ({r.email})": r for r in roster}
+        options = {f"{r.name} - {r.email}": r for r in roster}
         selected_labels = st.multiselect("Students", list(options.keys()), default=list(options.keys())[:0])
         select_all = st.checkbox("Select all fetched rows")
         if select_all:
@@ -793,27 +798,35 @@ with tab5:
 
         def _build_one(row) -> tuple[str, str]:
             """Returns (cert_number, pdf_path). Idempotent per (email, course)."""
+            effective_course = selected_course
+            
             record = cert_store.issue_or_get_certificate_number(
                 name=row.name,
                 email=row.email,
-                course=row.course,
+                course=effective_course,
                 completion_date=row.completion_date or now_str(),
                 institute_code=institute_code.strip(),
                 course_code=course_code.strip(),
                 year=cert_year.strip(),
+                existing_number=row.existing_certificate_number
             )
-            verify_url = qr_utils.verification_url(record.cert_number, base_url=base_url)
-            qr_bytes = qr_utils.make_qr_image_bytes(verify_url)
+            
+            # Use Name and Certificate Number for QR as requested
+            qr_data = f"Name: {record.name}\nCertificate No: {record.cert_number}"
+            qr_bytes = qr_utils.make_qr_image_bytes(qr_data)
             qr_path = os.path.join(CERT_DIR, f"qr_{record.cert_number}.png")
             with open(qr_path, "wb") as f:
                 f.write(qr_bytes)
 
             pdf_path = os.path.join(CERT_DIR, f"{record.cert_number}.pdf")
+            template_path = os.path.join("assets", "templates", f"certificate_{effective_course}_blank.pptx")
+            
             pptx_certificate.render_certificate_pdf(
                 name=record.name,
                 certificate_number=record.cert_number,
-                completion_date=record.completion_date or "",
+                completion_date=record.completion_date or now_str(),
                 qr_png_path=qr_path,
+                template_path=template_path,
                 output_pdf_path=pdf_path,
             )
             return record.cert_number, pdf_path
