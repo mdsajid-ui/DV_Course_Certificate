@@ -21,14 +21,20 @@ def is_valid_email(email: str) -> bool:
 
 
 class SMTPConfig:
-    """Loads SMTP credentials/settings from environment variables."""
+    """Loads SMTP credentials/settings from Streamlit secrets or environment variables."""
 
     def __init__(self):
-        self.host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-        self.port = int(os.environ.get("SMTP_PORT", "587"))
-        self.username = os.environ.get("SMTP_EMAIL", "")
-        self.password = os.environ.get("SMTP_PASSWORD", "")
-        self.sender_name = os.environ.get("SMTP_SENDER_NAME", "DV Analytics Team")
+        try:
+            import streamlit as st
+            sec = st.secrets
+        except Exception:
+            sec = {}
+
+        self.host = sec.get("SMTP_HOST", os.environ.get("SMTP_HOST", "smtp.gmail.com"))
+        self.port = int(sec.get("SMTP_PORT", os.environ.get("SMTP_PORT", "587")))
+        self.username = sec.get("SMTP_EMAIL", os.environ.get("SMTP_EMAIL", ""))
+        self.password = sec.get("SMTP_PASSWORD", os.environ.get("SMTP_PASSWORD", ""))
+        self.sender_name = sec.get("SMTP_SENDER_NAME", os.environ.get("SMTP_SENDER_NAME", "DV Analytics Team"))
 
     def is_configured(self) -> bool:
         return bool(self.username and self.password)

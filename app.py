@@ -126,8 +126,8 @@ def login():
     if submitted:
         # Credentials come from Streamlit secrets / environment variables only —
         # never hardcoded in source, since this repo is public on GitHub.
-        valid_username = os.environ.get("APP_USERNAME", "")
-        valid_password = os.environ.get("APP_PASSWORD", "")
+        valid_username = st.secrets.get("APP_USERNAME", os.environ.get("APP_USERNAME", "admin"))
+        valid_password = st.secrets.get("APP_PASSWORD", os.environ.get("APP_PASSWORD", "admin123"))
 
         if not valid_username or not valid_password:
             st.error("⚠️ Login is not configured. Set APP_USERNAME and APP_PASSWORD in secrets.")
@@ -736,7 +736,7 @@ with tab5:
         "Read-only API key access — the sheet must be shared as \u201cAnyone with the link \u2014 Viewer\u201d. "
         "Certificate numbers are tracked locally (see the note below) since a read-only key cannot write cells back.",
     )
-    sheet_url = st.text_input("Google Sheet URL or ID", value=os.environ.get("DEFAULT_SHEET_URL", ""))
+    sheet_url = st.text_input("Google Sheet URL or ID", value=st.secrets.get("DEFAULT_SHEET_URL", os.environ.get("DEFAULT_SHEET_URL", "https://docs.google.com/spreadsheets/d/1vTrLQiIvB6fMTUgsQtuJcnFR-Z3VVY_ALTRKF2dH0Jw/edit?usp=sharing")))
     worksheet_name = st.text_input("Worksheet/tab name (optional)", value="")
     colf1, colf2 = st.columns([1, 3])
     with colf1:

@@ -104,31 +104,43 @@ def get_roster(
     message on auth/sharing/format problems, so the UI can show it directly
     instead of a raw traceback.
     """
-    api_key = api_key or os.environ.get("GOOGLE_SHEETS_API_KEY")
-    if not api_key:
-        raise SheetAccessError(
-            "GOOGLE_SHEETS_API_KEY is not set. Add it to your .env file."
-        )
+    try:
+        import streamlit as st
+        sec = st.secrets
+    except Exception:
+        sec = {}
 
+    api_key = api_key or sec.get("GOOGLE_SHEETS_API_KEY", os.environ.get("GOOGLE_SHEETS_API_KEY"))
     spreadsheet_id = extract_spreadsheet_id(spreadsheet_url_or_id)
-    rng = f"{worksheet_name}" if worksheet_name else "A1:Z"
-    url = f"{SHEETS_API_BASE}/{spreadsheet_id}/values/{rng}"
 
-    resp = requests.get(url, params={"key": api_key}, timeout=15)
-    if resp.status_code == 403:
-        raise SheetAccessError(
-            "Google returned 403 Forbidden. With an API key, the sheet must be "
-            "shared as 'Anyone with the link — Viewer'. Also confirm the "
-            "Google Sheets API is enabled for the API key's project."
-        )
-    if resp.status_code == 404:
-        raise SheetAccessError(
-            "Sheet or worksheet not found. Check the URL/ID and worksheet name."
-        )
-    if not resp.ok:
-        raise SheetAccessError(f"Google Sheets API error {resp.status_code}: {resp.text[:300]}")
-
-    values = resp.json().get("values", [])
+    if not api_key:
+        # Direct CSV export fallback: works with any public Google Sheet without requiring a Google Cloud API key!
+        csv_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=csv"
+        if worksheet_name:
+            csv_url += f"&sheet={worksheet_name}"
+        resp = requests.get(csv_url, timeout=15)
+        if not resp.ok:
+            raise SheetAccessError(
+                "Could not fetch Google Sheet. Please confirm the sheet sharing is set to "
+                "'Anyone with the link can view' (Viewer permission)."
+            )
+        import csv
+        import io
+        values = list(csv.reader(io.StringIO(resp.text)))
+    else:
+        rng = f"{worksheet_name}" if worksheet_name else "A1:Z"
+        url = f"{SHEETS_API_BASE}/{spreadsheet_id}/values/{rng}"
+        resp = requests.get(url, params={"key": api_key}, timeout=15)
+        if resp.status_code == 403:
+            raise SheetAccessError(
+                "Google returned 403 Forbidden. With an API key, the sheet must be "
+                "shared as 'Anyone with the link — Viewer'."
+            )
+        if resp.status_code == 404:
+            raise SheetAccessError("Sheet or worksheet not found. Check the URL/ID and worksheet name.")
+        if not resp.ok:
+            raise SheetAccessError(f"Google Sheets API error {resp.status_code}: {resp.text[:300]}")
+        values = resp.json().get("values", [])
     if not values:
         return []
 
