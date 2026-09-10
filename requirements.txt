@@ -4,3 +4,12 @@ openpyxl>=3.1
 Pillow>=10.0
 python-dotenv>=1.0
 pymupdf>=1.23
+
+# Added for Google Sheet + QR Certificate + Verification feature
+requests>=2.31           # Google Sheets API (read-only, via API key)
+qrcode[pil]>=7.4          # QR code generation
+python-pptx>=0.6.23       # Edits the real .pptx certificate template (not a flattened image)
+Flask>=3.0                # Standalone /verify/{certificate_number} microservice (verify_service/)
+
+# NOTE: python-pptx -> PDF conversion shells out to LibreOffice ("soffice").
+# Install it on the server: `apt-get install -y libreoffice` (Debian/Ubuntu).

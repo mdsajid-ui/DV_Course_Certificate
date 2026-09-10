@@ -29,6 +29,10 @@ from utils import (
     now_str,
     LOG_PATH,
 )
+import cert_store
+import qr_utils
+import pptx_certificate
+import sheets_readonly
 
 load_dotenv()
 
@@ -353,6 +357,9 @@ defaults = {
     "y_pos_pct": 50,
     "text_color_hex": "#0B1B4D",
     "confirmed_params": None,
+    "sheet_roster": [],
+    "sheet_error": None,
+    "sending_in_progress": set(),
 }
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -376,8 +383,8 @@ with st.sidebar:
     st.divider()
     st.caption("DV Analytics · Certificate & Email Suite")
 
-tab1, tab2, tab3, tab4 = st.tabs(
-    ["①  Upload", "②  Generate", "③  Send", "④  Dashboard"]
+tab1, tab2, tab3, tab4, tab5 = st.tabs(
+    ["①  Upload", "②  Generate", "③  Send", "④  Dashboard", "⑤  Sheet + QR Certificates"]
 )
 
 # ---------------------------------------------------------------------------
@@ -718,4 +725,170 @@ with tab4:
     if results:
         card_start("Full report")
         st.dataframe(build_report_dataframe(results), use_container_width=True, height=320)
+        card_end()
+
+# ---------------------------------------------------------------------------
+# TAB 5 — Sheet-driven Certificate + QR Verification + Email
+# ---------------------------------------------------------------------------
+with tab5:
+    card_start(
+        "Connect Google Sheet",
+        "Read-only API key access — the sheet must be shared as \u201cAnyone with the link \u2014 Viewer\u201d. "
+        "Certificate numbers are tracked locally (see the note below) since a read-only key cannot write cells back.",
+    )
+    sheet_url = st.text_input("Google Sheet URL or ID", value=os.environ.get("DEFAULT_SHEET_URL", ""))
+    worksheet_name = st.text_input("Worksheet/tab name (optional)", value="")
+    colf1, colf2 = st.columns([1, 3])
+    with colf1:
+        fetch_clicked = st.button("🔄 Fetch roster")
+    if fetch_clicked:
+        try:
+            st.session_state.sheet_roster = sheets_readonly.get_roster(
+                sheet_url, worksheet_name=worksheet_name or None
+            )
+            st.session_state.sheet_error = None
+        except sheets_readonly.SheetAccessError as e:
+            st.session_state.sheet_roster = []
+            st.session_state.sheet_error = str(e)
+
+    if st.session_state.sheet_error:
+        st.error(st.session_state.sheet_error)
+    elif st.session_state.sheet_roster:
+        st.markdown(
+            f'<span class="dv-badge dv-badge-ok">✓ {len(st.session_state.sheet_roster)} rows loaded</span>',
+            unsafe_allow_html=True,
+        )
+    card_end()
+
+    card_start(
+        "Certificate numbering",
+        "Format: INSTITUTE-COURSE-YEAR-###### (e.g. DVA-APIDS-2026-000123). "
+        "Once issued to a student, the same number is reused on every regenerate/resend.",
+    )
+    ncol1, ncol2, ncol3 = st.columns(3)
+    with ncol1:
+        institute_code = st.text_input("Institute code", value=os.environ.get("CERT_INSTITUTE_CODE", "DVA"))
+    with ncol2:
+        course_code = st.text_input("Course code", value=os.environ.get("CERT_COURSE_CODE", "APIDS"))
+    with ncol3:
+        cert_year = st.text_input("Year", value=os.environ.get("CERT_YEAR", now_str()[:4]))
+    base_url = st.text_input(
+        "CERTIFICATE_VERIFICATION_BASE_URL",
+        value=os.environ.get("CERTIFICATE_VERIFICATION_BASE_URL", "http://localhost:8000"),
+        help="QR codes point to {this}/verify/{certificate_number}. Change the env var for production — no code change needed.",
+    )
+    card_end()
+
+    if st.session_state.sheet_roster:
+        card_start("Select students & send")
+        roster = st.session_state.sheet_roster
+        options = {f"{r.name} — {r.course} ({r.email})": r for r in roster}
+        selected_labels = st.multiselect("Students", list(options.keys()), default=list(options.keys())[:0])
+        select_all = st.checkbox("Select all fetched rows")
+        if select_all:
+            selected_labels = list(options.keys())
+
+        preview_col, send_col = st.columns([1, 1])
+        selected_rows = [options[l] for l in selected_labels]
+
+        def _build_one(row) -> tuple[str, str]:
+            """Returns (cert_number, pdf_path). Idempotent per (email, course)."""
+            record = cert_store.issue_or_get_certificate_number(
+                name=row.name,
+                email=row.email,
+                course=row.course,
+                completion_date=row.completion_date or now_str(),
+                institute_code=institute_code.strip(),
+                course_code=course_code.strip(),
+                year=cert_year.strip(),
+            )
+            verify_url = qr_utils.verification_url(record.cert_number, base_url=base_url)
+            qr_bytes = qr_utils.make_qr_image_bytes(verify_url)
+            qr_path = os.path.join(CERT_DIR, f"qr_{record.cert_number}.png")
+            with open(qr_path, "wb") as f:
+                f.write(qr_bytes)
+
+            pdf_path = os.path.join(CERT_DIR, f"{record.cert_number}.pdf")
+            pptx_certificate.render_certificate_pdf(
+                name=record.name,
+                certificate_number=record.cert_number,
+                completion_date=record.completion_date or "",
+                qr_png_path=qr_path,
+                output_pdf_path=pdf_path,
+            )
+            return record.cert_number, pdf_path
+
+        with preview_col:
+            if st.button("👁️ Preview first selected", disabled=not selected_rows):
+                try:
+                    cert_number, pdf_path = _build_one(selected_rows[0])
+                    with open(pdf_path, "rb") as f:
+                        st.download_button(
+                            f"⬇️ Preview: {cert_number}.pdf", f.read(), file_name=f"{cert_number}.pdf", mime="application/pdf"
+                        )
+                except pptx_certificate.TemplateFieldNotFound as e:
+                    st.error(str(e))
+                except Exception as e:
+                    st.error(f"Could not build preview: {e}")
+
+        with send_col:
+            smtp_ready = SMTPConfig().is_configured()
+            send_disabled = not selected_rows or not smtp_ready
+            send_clicked = st.button(
+                f"📧 Send certificate to {len(selected_rows)} student(s)",
+                disabled=send_disabled,
+                help=None if smtp_ready else "Configure SMTP_EMAIL / SMTP_PASSWORD first (see sidebar).",
+            )
+
+        if send_clicked:
+            progress = st.progress(0.0, text="Starting…")
+            sent_ok, sent_fail = [], []
+            in_flight = st.session_state.sending_in_progress
+            with EmailSender() as sender:
+                for i, row in enumerate(selected_rows):
+                    key = cert_store.student_key(row.email, row.course)
+                    if key in in_flight:
+                        continue  # guards against a double-click re-triggering this same batch
+                    in_flight.add(key)
+                    try:
+                        cert_number, pdf_path = _build_one(row)
+                        existing = cert_store.get_by_cert_number(cert_number)
+                        subject = f"Your DV Analytics Certificate — {row.course}"
+                        body = (
+                            f"Dear {row.name},\n\n"
+                            f"Congratulations on completing {row.course}! Your certificate is attached.\n\n"
+                            f"Certificate No: {cert_number}\n"
+                            f"Verify anytime at: {qr_utils.verification_url(cert_number, base_url=base_url)}\n\n"
+                            f"Regards,\nDV Analytics Team"
+                        )
+                        sender.send(row.email, subject, body, attachment_path=pdf_path)
+                        cert_store.mark_sent(cert_number)
+                        sent_ok.append((row.name, cert_number))
+                    except Exception as e:
+                        sent_fail.append((row.name, str(e)))
+                    finally:
+                        in_flight.discard(key)
+                        progress.progress((i + 1) / len(selected_rows), text=f"{i + 1}/{len(selected_rows)}")
+
+            if sent_ok:
+                st.success(f"Sent {len(sent_ok)} certificate(s): " + ", ".join(f"{n} ({c})" for n, c in sent_ok))
+            if sent_fail:
+                st.error("Failed: " + "; ".join(f"{n}: {err}" for n, err in sent_fail))
+
+        card_end()
+
+        card_start("Export certificate numbers", "Paste this back into your Google Sheet manually — a read-only API key can't write cells for you.")
+        if st.button("⬇️ Build export CSV of issued numbers"):
+            export_rows = []
+            for row in roster:
+                rec = cert_store.get_by_student(row.email, row.course)
+                if rec:
+                    export_rows.append(
+                        {"Name": rec.name, "Email": rec.email, "Course": rec.course, "Certificate Number": rec.cert_number}
+                    )
+            if export_rows:
+                csv_bytes = pd.DataFrame(export_rows).to_csv(index=False).encode("utf-8")
+                st.download_button("⬇️ certificate_numbers.csv", csv_bytes, file_name="certificate_numbers.csv", mime="text/csv")
+            else:
+                st.info("No certificate numbers issued yet for the fetched roster.")
         card_end()
