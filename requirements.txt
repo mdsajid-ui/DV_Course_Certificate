@@ -11,5 +11,12 @@ qrcode[pil]>=7.4          # QR code generation
 python-pptx>=0.6.23       # Edits the real .pptx certificate template (not a flattened image)
 Flask>=3.0                # Standalone /verify/{certificate_number} microservice (verify_service/)
 
+# Added for optional Google Sheet WRITE-BACK (Certificate Status / Number /
+# Generated Date / Email Status / Email Sent Date). Only used if
+# GOOGLE_SERVICE_ACCOUNT_JSON is configured — the app runs fine without
+# these too, falling back to the read-only path above.
+gspread>=6.0
+google-auth>=2.28
+
 # NOTE: python-pptx -> PDF conversion shells out to LibreOffice ("soffice").
 # Install it on the server: `apt-get install -y libreoffice` (Debian/Ubuntu).

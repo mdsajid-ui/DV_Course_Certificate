@@ -34,6 +34,8 @@ from typing import List, Optional
 
 import requests
 
+from utils import get_secret
+
 SHEETS_API_BASE = "https://sheets.googleapis.com/v4/spreadsheets"
 
 # Same spirit as utils.py's COLUMN_ALIASES — flexible header matching.
@@ -104,13 +106,7 @@ def get_roster(
     message on auth/sharing/format problems, so the UI can show it directly
     instead of a raw traceback.
     """
-    try:
-        import streamlit as st
-        sec = st.secrets
-    except Exception:
-        sec = {}
-
-    api_key = api_key or sec.get("GOOGLE_SHEETS_API_KEY", os.environ.get("GOOGLE_SHEETS_API_KEY"))
+    api_key = api_key or get_secret("GOOGLE_SHEETS_API_KEY")
     spreadsheet_id = extract_spreadsheet_id(spreadsheet_url_or_id)
 
     if not api_key:

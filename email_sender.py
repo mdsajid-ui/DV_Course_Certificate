@@ -11,6 +11,8 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 
+from utils import get_secret
+
 EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
 
 
@@ -24,17 +26,11 @@ class SMTPConfig:
     """Loads SMTP credentials/settings from Streamlit secrets or environment variables."""
 
     def __init__(self):
-        try:
-            import streamlit as st
-            sec = st.secrets
-        except Exception:
-            sec = {}
-
-        self.host = sec.get("SMTP_HOST", os.environ.get("SMTP_HOST", "smtp.gmail.com"))
-        self.port = int(sec.get("SMTP_PORT", os.environ.get("SMTP_PORT", "587")))
-        self.username = sec.get("SMTP_EMAIL", os.environ.get("SMTP_EMAIL", ""))
-        self.password = sec.get("SMTP_PASSWORD", os.environ.get("SMTP_PASSWORD", ""))
-        self.sender_name = sec.get("SMTP_SENDER_NAME", os.environ.get("SMTP_SENDER_NAME", "DV Analytics Team"))
+        self.host = get_secret("SMTP_HOST", "smtp.gmail.com")
+        self.port = int(get_secret("SMTP_PORT", "587"))
+        self.username = get_secret("SMTP_EMAIL", "")
+        self.password = get_secret("SMTP_PASSWORD", "")
+        self.sender_name = get_secret("SMTP_SENDER_NAME", "DV Analytics Team")
 
     def is_configured(self) -> bool:
         return bool(self.username and self.password)

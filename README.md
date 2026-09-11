@@ -87,26 +87,65 @@ inside the PDF → email sent with the PDF attached → anyone who scans the QR
 sees a public "CERTIFICATE VERIFIED" page with Name, Course, Certificate
 Number, and Status — no email, phone, or other private data.
 
+### Update (this revision): Google Sheet write-back, two real course templates, editable email, dashboard
+
+A follow-up pass against a more detailed spec added:
+
+- **`sheets_writer.py`** — optional write-back using a service account
+  (`GOOGLE_SERVICE_ACCOUNT_JSON` or `GOOGLE_SERVICE_ACCOUNT_JSON_CONTENTS`).
+  When configured, Certificate Number / Certificate Status / Generated Date
+  / Email Status / Email Sent Date / Verification URL are written back into
+  the sheet automatically (matched by email; missing columns are added,
+  nothing existing is overwritten or deleted). Without it configured, the
+  app behaves exactly as before — read-only + the CSV export button.
+  `data/certificates.db` remains the authoritative local record either way
+  (a failed sheet write never blocks certificate generation or sending).
+- **Fixed course templates.** "APIDA" / "APIDIA" / "APIDS" used to all point
+  at one identical file (and it was actually the APDA design, mislabeled).
+  The two real templates are now `assets/templates/certificate_APIDS_blank.pptx`
+  and `assets/templates/certificate_APDA_blank.pptx`, and the course dropdown
+  in Tab ⑤ is `["APIDS", "APDA"]`. Add a new course by dropping in
+  `certificate_<CODE>_blank.pptx` (same bracket pattern) and adding `<CODE>`
+  to that list.
+- **Fixed the QR payload.** It previously encoded raw `"Name: ...\nCertificate No: ..."`
+  text instead of a URL. It now encodes `{CERTIFICATE_VERIFICATION_BASE_URL}/verify/{number}`,
+  matching what the README already described and what `verify_service/` expects.
+- **Fixed a duplicate-send edge case.** The in-flight guard was keyed on the
+  sheet's own "course" column while certificate generation used the
+  dropdown's selected course — a mismatch that could allow two overlapping
+  sends for the same student under different course labels. Both now use
+  the selected course consistently.
+- **Editable email subject/body** with `{{student_name}}`, `{{course_name}}`,
+  `{{certificate_number}}`, `{{issue_date}}` placeholders and a live preview,
+  replacing the previously hardcoded subject/body.
+- **Mini dashboard** (Total Students / Certificates Generated / Certificates
+  Sent / Pending) and an "already issued" indicator next to each student in
+  the picker, so duplicates are visible before you click, not just handled
+  silently afterward.
+- **Fixed a crash affecting the whole app, not just Tab ⑤:** `st.secrets.get(...)`
+  raises `StreamlitSecretNotFoundError` (not a normal missing-key case) when
+  no `secrets.toml` exists at all — which is exactly the deployment style
+  this project's own setup instructions describe (`.env` only). That broke
+  even the **login screen**. Fixed via a single `get_secret()` helper in
+  `utils.py` that every module now uses instead of touching `st.secrets`
+  directly.
+
 ### Two important deviations from the original spec — read this first
 
-**1. Google Sheets access is read-only (API key), by explicit choice.**
-A service account or OAuth would allow writing certificate numbers back into
-the sheet automatically. Since the ask was for API-key access instead, the
-sheet can only be *read*, not written to. The consequence: **certificate
-numbers are NOT stored in your Google Sheet.** They're stored locally in
-`data/certificates.db` (SQLite), which is the actual source of truth for
-"has this student already got a number, and what is it." That's what
-guarantees the same number comes back on every regenerate/resend, and it's
-what the `/verify/{number}` page reads from. Use the **"Export certificate
-numbers"** button in Tab ⑤ to get a CSV you can paste back into your sheet
-by hand if you want the numbers visible there too. Back up
-`data/certificates.db` — if you switch this module to a service account or
-OAuth later, `sheets_readonly.py` is the only file that needs to change.
+**1. Google Sheets *read* access is via API key by default; write-back is
+now available separately (see above), via a service account.**
+A service account is what actually enables writing — an API key still
+cannot write cells no matter what. If you don't configure a service
+account, the sheet remains read-only exactly as before: **certificate
+numbers stay the source-of-truth in `data/certificates.db`** and the
+**"Export certificate numbers"** button in Tab ⑤ gives you a CSV to paste in
+by hand. Back up `data/certificates.db` regardless of which path you use.
 
 Also: with an API key, the sheet **must** be shared as *"Anyone with the
 link — Viewer."* Google does not authorize API keys against private sheets
-under any setting — there's no way around this short of switching auth
-methods.
+under any setting. A service account does not have this restriction — the
+sheet can stay fully private and just be shared with the service account's
+own email address.
 
 **2. The verification page is a *separate* small Flask app, not a Streamlit
 page.** Streamlit only supports its own page-slug routing with query
@@ -178,6 +217,14 @@ CERTIFICATE_VERIFICATION_BASE_URL=https://your-domain.example.com
 
 Share your Google Sheet as "Anyone with the link — Viewer".
 
+**Optional — to also write status back into the sheet automatically:**
+create a service account (Google Cloud Console → IAM → Service Accounts →
+Create Key, JSON), share the sheet with its `client_email` as an Editor
+(the sheet can stay private for this), and set `GOOGLE_SERVICE_ACCOUNT_JSON`
+to the path of that JSON file in `.env`. Without this, everything still
+works — you'll just use the "Export certificate numbers" CSV button instead
+of automatic sync.
+
 Run both processes:
 
 ```bash
@@ -225,9 +272,11 @@ and doesn't overlap the signature or decorative border).
 ```
 cert_store.py                          # SQLite: certificate numbers, send status (source of truth)
 sheets_readonly.py                     # Google Sheets roster reader (API key, read-only)
-qr_utils.py                            # QR generation
+sheets_writer.py                       # Optional Google Sheets write-back (service account)
+qr_utils.py                            # QR generation (encodes the /verify/{number} URL)
 pptx_certificate.py                    # Fills the real .pptx template, embeds QR, renders PDF
 assets/templates/certificate_APIDS_blank.pptx
+assets/templates/certificate_APDA_blank.pptx
 verify_service/
   verify_app.py                        # standalone Flask app: GET /verify/<certificate_number>
   nginx.example.conf
@@ -235,6 +284,7 @@ tests/
   test_cert_store.py
   test_pptx_certificate.py
   test_sheets_readonly.py
+  test_sheets_writer.py
   test_verify_service.py
 ```
 

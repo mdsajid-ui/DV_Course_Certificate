@@ -28,11 +28,13 @@ from utils import (
     log_event,
     now_str,
     LOG_PATH,
+    get_secret,
 )
 import cert_store
 import qr_utils
 import pptx_certificate
 import sheets_readonly
+import sheets_writer
 
 load_dotenv()
 
@@ -126,8 +128,8 @@ def login():
     if submitted:
         # Credentials come from Streamlit secrets / environment variables only —
         # never hardcoded in source, since this repo is public on GitHub.
-        valid_username = st.secrets.get("APP_USERNAME", os.environ.get("APP_USERNAME", "admin"))
-        valid_password = st.secrets.get("APP_PASSWORD", os.environ.get("APP_PASSWORD", "admin123"))
+        valid_username = get_secret("APP_USERNAME", "admin")
+        valid_password = get_secret("APP_PASSWORD", "admin123")
 
         if not valid_username or not valid_password:
             st.error("⚠️ Login is not configured. Set APP_USERNAME and APP_PASSWORD in secrets.")
@@ -360,6 +362,15 @@ defaults = {
     "sheet_roster": [],
     "sheet_error": None,
     "sending_in_progress": set(),
+    "email_subject_tpl": "Course Completion Certificate \u2013 {{student_name}}",
+    "email_body_tpl": (
+        "Dear {{student_name}},\n\n"
+        "Congratulations on successfully completing {{course_name}}.\n\n"
+        "Please find your course completion certificate attached to this email.\n"
+        "Certificate No: {{certificate_number}}\n"
+        "Date of Completion: {{issue_date}}\n\n"
+        "Regards,\nDV Analytics Team"
+    ),
 }
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -730,13 +741,31 @@ with tab4:
 # ---------------------------------------------------------------------------
 # TAB 5 — Sheet-driven Certificate + QR Verification + Email
 # ---------------------------------------------------------------------------
+def _apply_placeholders(template_text: str, *, student_name, course_name, certificate_number, issue_date) -> str:
+    return (
+        template_text.replace("{{student_name}}", student_name)
+        .replace("{{course_name}}", course_name)
+        .replace("{{certificate_number}}", certificate_number)
+        .replace("{{issue_date}}", issue_date)
+    )
+
+
 with tab5:
+    sheet_write_enabled = sheets_writer.is_configured()
+
     card_start(
         "Connect Google Sheet",
-        "Read-only API key access — the sheet must be shared as \u201cAnyone with the link \u2014 Viewer\u201d. "
-        "Certificate numbers are tracked locally (see the note below) since a read-only key cannot write cells back.",
+        (
+            "Service account configured — Certificate Status, Certificate Number, Generated Date, "
+            "Email Status, and Email Sent Date will be written back to this sheet automatically."
+            if sheet_write_enabled
+            else "Read-only access right now (no service account configured) — the sheet must be shared as "
+            "\u201cAnyone with the link \u2014 Viewer\u201d, and status changes won't be written back automatically "
+            "(use the CSV export below, or set GOOGLE_SERVICE_ACCOUNT_JSON to enable auto-write-back). "
+            "Certificate numbers are always tracked locally in data/certificates.db regardless."
+        ),
     )
-    sheet_url = st.text_input("Google Sheet URL or ID", value=st.secrets.get("DEFAULT_SHEET_URL", os.environ.get("DEFAULT_SHEET_URL", "https://docs.google.com/spreadsheets/d/1vTrLQiIvB6fMTUgsQtuJcnFR-Z3VVY_ALTRKF2dH0Jw/edit?usp=sharing")))
+    sheet_url = st.text_input("Google Sheet URL or ID", value=get_secret("DEFAULT_SHEET_URL", "https://docs.google.com/spreadsheets/d/1vTrLQiIvB6fMTUgsQtuJcnFR-Z3VVY_ALTRKF2dH0Jw/edit?usp=sharing"))
     worksheet_name = st.text_input("Worksheet/tab name (optional)", value="")
     colf1, colf2 = st.columns([1, 3])
     with colf1:
@@ -769,7 +798,12 @@ with tab5:
     with ncol1:
         institute_code = st.text_input("Institute code", value=os.environ.get("CERT_INSTITUTE_CODE", "DVA"))
     with ncol2:
-        course_code = st.text_input("Course code", value=os.environ.get("CERT_COURSE_CODE", "APIDS"))
+        course_code_display = st.text_input(
+            "Course code (auto-follows the course selected below)",
+            value=os.environ.get("CERT_COURSE_CODE", "APIDS"),
+            disabled=True,
+            key="course_code_display",
+        )
     with ncol3:
         cert_year = st.text_input("Year", value=os.environ.get("CERT_YEAR", now_str()[:4]))
     base_url = st.text_input(
@@ -780,47 +814,90 @@ with tab5:
     card_end()
 
     if st.session_state.sheet_roster:
-        card_start("Select Course & Students")
-        
-        # Determine Course/Template to use
-        course_options = ["APIDA", "APIDIA", "APIDS"]
-        selected_course = st.selectbox("Select Course / Template", course_options, index=0)
-        
         roster = st.session_state.sheet_roster
+
+        card_start("Select Course & Students")
+
+        # Only the two real, distinct certificate designs currently on file.
+        # Add a new .pptx under assets/templates/ named certificate_<CODE>_blank.pptx
+        # and add "<CODE>" here to support another course later.
+        course_options = ["APIDS", "APDA"]
+        selected_course = st.selectbox("Select Course / Template", course_options, index=0)
+        # Keep the numbering "course code" locked to whichever template is selected,
+        # so the certificate's printed course and its number prefix can never drift apart.
+        course_code = selected_course
+
+        # -------------------------------------------------------------
+        # Mini dashboard for this pipeline (Total / Generated / Sent / Pending)
+        # -------------------------------------------------------------
+        total_students = len(roster)
+        generated_count = sum(1 for r in roster if cert_store.get_by_student(r.email, selected_course))
+        sent_count = sum(
+            1
+            for r in roster
+            if (rec := cert_store.get_by_student(r.email, selected_course)) and rec.send_count > 0
+        )
+        pending_count = total_students - sent_count
+
+        d1, d2, d3, d4 = st.columns(4)
+        d1.metric("Total Students", total_students)
+        d2.metric(f"Certificates Generated ({selected_course})", generated_count)
+        d3.metric(f"Certificates Sent ({selected_course})", sent_count)
+        d4.metric("Pending", max(pending_count, 0))
+
         options = {f"{r.name} - {r.email}": r for r in roster}
-        selected_labels = st.multiselect("Students", list(options.keys()), default=list(options.keys())[:0])
+
+        def _status_tag(row) -> str:
+            rec = cert_store.get_by_student(row.email, selected_course)
+            if rec and rec.send_count > 0:
+                return " ✅ sent"
+            if rec:
+                return " 📄 generated"
+            return ""
+
+        labeled_options = {f"{label}{_status_tag(row)}": row for label, row in options.items()}
+        selected_labels = st.multiselect("Students", list(labeled_options.keys()), default=[])
         select_all = st.checkbox("Select all fetched rows")
         if select_all:
-            selected_labels = list(options.keys())
+            selected_labels = list(labeled_options.keys())
 
         preview_col, send_col = st.columns([1, 1])
-        selected_rows = [options[l] for l in selected_labels]
+        selected_rows = [labeled_options[l] for l in selected_labels]
 
-        def _build_one(row) -> tuple[str, str]:
-            """Returns (cert_number, pdf_path). Idempotent per (email, course)."""
-            effective_course = selected_course
-            
+        # Surface duplicates before anything is generated, per "don't silently
+        # regenerate" — existing certs are reused, never overwritten, but the
+        # admin should see that up front rather than discover it after clicking.
+        already_issued = [r for r in selected_rows if cert_store.get_by_student(r.email, selected_course)]
+        if already_issued:
+            st.info(
+                f"{len(already_issued)} of the selected student(s) already have a certificate for "
+                f"{selected_course} — clicking Preview/Send will reuse their existing certificate "
+                "number and PDF rather than issuing a new one."
+            )
+
+        def _build_one(row) -> tuple[str, str, bool]:
+            """Returns (cert_number, pdf_path, was_new)."""
+            was_new = cert_store.get_by_student(row.email, selected_course) is None
             record = cert_store.issue_or_get_certificate_number(
                 name=row.name,
                 email=row.email,
-                course=effective_course,
+                course=selected_course,
                 completion_date=row.completion_date or now_str(),
                 institute_code=institute_code.strip(),
                 course_code=course_code.strip(),
                 year=cert_year.strip(),
-                existing_number=row.existing_certificate_number
+                existing_number=row.existing_certificate_number,
             )
-            
-            # Use Name and Certificate Number for QR as requested
-            qr_data = f"Name: {record.name}\nCertificate No: {record.cert_number}"
-            qr_bytes = qr_utils.make_qr_image_bytes(qr_data)
+
+            verify_url = qr_utils.verification_url(record.cert_number, base_url=base_url)
+            qr_bytes = qr_utils.make_qr_image_bytes(verify_url)
             qr_path = os.path.join(CERT_DIR, f"qr_{record.cert_number}.png")
             with open(qr_path, "wb") as f:
                 f.write(qr_bytes)
 
             pdf_path = os.path.join(CERT_DIR, f"{record.cert_number}.pdf")
-            template_path = os.path.join("assets", "templates", f"certificate_{effective_course}_blank.pptx")
-            
+            template_path = os.path.join("assets", "templates", f"certificate_{selected_course}_blank.pptx")
+
             pptx_certificate.render_certificate_pdf(
                 name=record.name,
                 certificate_number=record.cert_number,
@@ -829,12 +906,28 @@ with tab5:
                 template_path=template_path,
                 output_pdf_path=pdf_path,
             )
-            return record.cert_number, pdf_path
+
+            if was_new and sheet_write_enabled:
+                try:
+                    sheets_writer.update_student_status(
+                        sheet_url,
+                        email=row.email,
+                        worksheet_name=worksheet_name or None,
+                        certificate_number=record.cert_number,
+                        certificate_status="GENERATED",
+                        generated_date=now_str(),
+                        verification_url=verify_url,
+                    )
+                except sheets_writer.SheetWriteError as e:
+                    st.warning(f"Certificate generated, but the sheet wasn't updated: {e}")
+
+            return record.cert_number, pdf_path, was_new
 
         with preview_col:
             if st.button("👁️ Preview first selected", disabled=not selected_rows):
                 try:
-                    cert_number, pdf_path = _build_one(selected_rows[0])
+                    cert_number, pdf_path, was_new = _build_one(selected_rows[0])
+                    st.caption(("New certificate: " if was_new else "Existing certificate reused: ") + cert_number)
                     with open(pdf_path, "rb") as f:
                         st.download_button(
                             f"⬇️ Preview: {cert_number}.pdf", f.read(), file_name=f"{cert_number}.pdf", mime="application/pdf"
@@ -852,6 +945,41 @@ with tab5:
                 disabled=send_disabled,
                 help=None if smtp_ready else "Configure SMTP_EMAIL / SMTP_PASSWORD first (see sidebar).",
             )
+        card_end()
+
+        # -------------------------------------------------------------
+        # Editable email composition — placeholders filled in per recipient
+        # -------------------------------------------------------------
+        card_start(
+            "Email composition",
+            "Editable subject/body. Placeholders {{student_name}}, {{course_name}}, {{certificate_number}}, "
+            "and {{issue_date}} are replaced automatically for each recipient before sending.",
+        )
+        email_subject_tpl = st.text_input("Subject", key="email_subject_tpl")
+        email_body_tpl = st.text_area("Body", height=180, key="email_body_tpl")
+        if selected_rows:
+            preview_row = selected_rows[0]
+            with st.expander("Preview for first selected student"):
+                st.text(
+                    "Subject: "
+                    + _apply_placeholders(
+                        email_subject_tpl,
+                        student_name=preview_row.name,
+                        course_name=selected_course,
+                        certificate_number=preview_row.existing_certificate_number or "(assigned on generate)",
+                        issue_date=preview_row.completion_date or now_str(),
+                    )
+                )
+                st.text(
+                    _apply_placeholders(
+                        email_body_tpl,
+                        student_name=preview_row.name,
+                        course_name=selected_course,
+                        certificate_number=preview_row.existing_certificate_number or "(assigned on generate)",
+                        issue_date=preview_row.completion_date or now_str(),
+                    )
+                )
+        card_end()
 
         if send_clicked:
             progress = st.progress(0.0, text="Starting…")
@@ -859,27 +987,46 @@ with tab5:
             in_flight = st.session_state.sending_in_progress
             with EmailSender() as sender:
                 for i, row in enumerate(selected_rows):
-                    key = cert_store.student_key(row.email, row.course)
+                    key = cert_store.student_key(row.email, selected_course)
                     if key in in_flight:
                         continue  # guards against a double-click re-triggering this same batch
                     in_flight.add(key)
+                    email_status, email_error = "SENT", None
                     try:
-                        cert_number, pdf_path = _build_one(row)
-                        existing = cert_store.get_by_cert_number(cert_number)
-                        subject = f"Your DV Analytics Certificate — {row.course}"
-                        body = (
-                            f"Dear {row.name},\n\n"
-                            f"Congratulations on completing {row.course}! Your certificate is attached.\n\n"
-                            f"Certificate No: {cert_number}\n"
-                            f"Verify anytime at: {qr_utils.verification_url(cert_number, base_url=base_url)}\n\n"
-                            f"Regards,\nDV Analytics Team"
+                        cert_number, pdf_path, _ = _build_one(row)
+                        issue_date = row.completion_date or now_str()
+                        subject = _apply_placeholders(
+                            email_subject_tpl,
+                            student_name=row.name,
+                            course_name=selected_course,
+                            certificate_number=cert_number,
+                            issue_date=issue_date,
+                        )
+                        body = _apply_placeholders(
+                            email_body_tpl,
+                            student_name=row.name,
+                            course_name=selected_course,
+                            certificate_number=cert_number,
+                            issue_date=issue_date,
                         )
                         sender.send(row.email, subject, body, attachment_path=pdf_path)
                         cert_store.mark_sent(cert_number)
                         sent_ok.append((row.name, cert_number))
                     except Exception as e:
+                        email_status, email_error = "FAILED", str(e)
                         sent_fail.append((row.name, str(e)))
                     finally:
+                        if sheet_write_enabled:
+                            try:
+                                sheets_writer.update_student_status(
+                                    sheet_url,
+                                    email=row.email,
+                                    worksheet_name=worksheet_name or None,
+                                    email_status=email_status,
+                                    email_sent_date=now_str() if email_status == "SENT" else None,
+                                )
+                            except sheets_writer.SheetWriteError:
+                                pass  # already have this student's error surfaced via sent_fail/warning above
                         in_flight.discard(key)
                         progress.progress((i + 1) / len(selected_rows), text=f"{i + 1}/{len(selected_rows)}")
 
@@ -888,16 +1035,22 @@ with tab5:
             if sent_fail:
                 st.error("Failed: " + "; ".join(f"{n}: {err}" for n, err in sent_fail))
 
-        card_end()
-
-        card_start("Export certificate numbers", "Paste this back into your Google Sheet manually — a read-only API key can't write cells for you.")
+        card_start("Export certificate numbers", "Paste this back into your Google Sheet manually — only needed if write-back isn't configured above.")
         if st.button("⬇️ Build export CSV of issued numbers"):
             export_rows = []
             for row in roster:
-                rec = cert_store.get_by_student(row.email, row.course)
+                rec = cert_store.get_by_student(row.email, selected_course)
                 if rec:
                     export_rows.append(
-                        {"Name": rec.name, "Email": rec.email, "Course": rec.course, "Certificate Number": rec.cert_number}
+                        {
+                            "Name": rec.name,
+                            "Email": rec.email,
+                            "Course": rec.course,
+                            "Certificate Number": rec.cert_number,
+                            "Certificate Status": rec.status,
+                            "Email Status": "SENT" if rec.send_count > 0 else "NOT SENT",
+                            "Email Sent Date": rec.last_sent_at or "",
+                        }
                     )
             if export_rows:
                 csv_bytes = pd.DataFrame(export_rows).to_csv(index=False).encode("utf-8")

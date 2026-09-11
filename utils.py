@@ -15,6 +15,30 @@ REQUIRED_COLUMNS = ["Name", "Mobile Number", "Email ID"]
 LOG_PATH = "email_log.txt"
 
 
+def get_secret(name: str, default=None):
+    """
+    Reads a config value from Streamlit secrets first, falling back to an
+    environment variable, then `default`.
+
+    st.secrets.get(...) raises StreamlitSecretNotFoundError (not a KeyError)
+    when no secrets.toml exists at all — which is the normal case for a
+    deployment that only uses a .env file / plain environment variables, as
+    this project's own setup instructions describe. Calling st.secrets.get()
+    directly therefore crashes the whole app (including the login screen) on
+    any such deployment. This wrapper is the one place that risk is handled;
+    every other module should call this instead of touching st.secrets
+    directly.
+    """
+    try:
+        import streamlit as st
+        val = st.secrets.get(name)
+        if val not in (None, ""):
+            return val
+    except Exception:
+        pass
+    return os.environ.get(name, default)
+
+
 def setup_logger() -> logging.Logger:
     logger = logging.getLogger("cert_email_app")
     logger.setLevel(logging.INFO)
