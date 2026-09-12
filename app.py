@@ -1367,32 +1367,125 @@ with tab2:
 # TAB 3 — Sending Formalities
 # ===========================================================================
 with tab3:
-    card_start("1. SMTP Status & Configuration", "Verify your email server connectivity before dispatching certificates.")
+    card_start("1. SMTP Server & Sender Configuration", "Configure and test your email credentials to dispatch certificates reliably.")
+
+    # Initialize smtp overrides in session state if needed
+    if "smtp_overrides" not in st.session_state:
+        st.session_state["smtp_overrides"] = {}
 
     smtp_cfg = SMTPConfig()
-    s_col1, s_col2 = st.columns([2, 1])
-    with s_col1:
+
+    st_col1, st_col2 = st.columns([1.6, 1.4])
+    with st_col1:
         if smtp_cfg.is_configured():
-            st.markdown(f'<span class="dv-badge dv-badge-ok">● SMTP Connected ({smtp_cfg.username})</span>', unsafe_allow_html=True)
+            st.markdown(f'<span class="dv-badge dv-badge-ok">● SMTP Configured &amp; Active ({smtp_cfg.username})</span>', unsafe_allow_html=True)
             st.caption(f"Host: `{smtp_cfg.host}:{smtp_cfg.port}` · Sender: `{smtp_cfg.sender_name}`")
         else:
-            st.markdown('<span class="dv-badge dv-badge-warn">● SMTP Not Configured</span>', unsafe_allow_html=True)
-            st.caption("Please configure **SMTP_EMAIL** and **SMTP_PASSWORD** (Gmail App Password) in Streamlit secrets.")
+            st.markdown('<span class="dv-badge dv-badge-warn">⚠️ SMTP Not Configured</span>', unsafe_allow_html=True)
+            st.caption("Enter your email credentials below or set `SMTP_EMAIL` and `SMTP_PASSWORD` in Streamlit secrets.")
 
-    with s_col2:
-        with st.expander("🧪 Send Test Email"):
-            test_recipient = st.text_input("Test Email Address", value=smtp_cfg.username)
-            if st.button("Send Test", use_container_width=True, disabled=not smtp_cfg.is_configured()):
-                try:
-                    with EmailSender() as sender:
-                        sender.send(
-                            test_recipient,
-                            "DV Analytics SMTP Connection Test",
-                            "Hello! This is a test email confirming your DV Analytics Certificate delivery system is functioning perfectly.",
-                        )
-                    st.success("✓ Test email sent successfully!")
-                except Exception as e:
-                    st.error(f"Test email failed: {e}")
+    with st_col2:
+        with st.expander("💡 How to get a Gmail App Password", expanded=False):
+            st.markdown(
+                """
+                1. Go to your **[Google Account Security](https://myaccount.google.com/security)**.
+                2. Ensure **2-Step Verification** is turned **ON**.
+                3. Go to **[App Passwords](https://myaccount.google.com/apppasswords)**.
+                4. Enter App name (e.g. `DV Analytics`) and click **Create**.
+                5. Copy the generated **16-letter password** and paste it below.
+                """
+            )
+
+    # Interactive SMTP Credentials Form
+    with st.expander("⚙️ Manage & Test SMTP Credentials", expanded=(not smtp_cfg.is_configured())):
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            cfg_user = st.text_input(
+                "Sender Email Address",
+                value=st.session_state["smtp_overrides"].get("username", smtp_cfg.username),
+                placeholder="e.g. admin@dvanalytics.com or name@gmail.com",
+            )
+            cfg_pass = st.text_input(
+                "Sender App Password / Token",
+                value=st.session_state["smtp_overrides"].get("password", smtp_cfg.password),
+                type="password",
+                placeholder="16-character Google App Password (e.g. abcd efgh ijkl mnop)",
+                help="For Gmail, use a 16-character App Password, NOT your personal account password.",
+            )
+            cfg_name = st.text_input(
+                "Sender Display Name",
+                value=st.session_state["smtp_overrides"].get("sender_name", smtp_cfg.sender_name),
+                placeholder="e.g. DV Analytics Team",
+            )
+        with col_c2:
+            cfg_host = st.text_input(
+                "SMTP Server Host",
+                value=st.session_state["smtp_overrides"].get("host", smtp_cfg.host),
+                placeholder="smtp.gmail.com",
+            )
+            cfg_port = st.number_input(
+                "SMTP Port",
+                value=int(st.session_state["smtp_overrides"].get("port", smtp_cfg.port)),
+                step=1,
+                help="587 for STARTTLS (Gmail/Outlook/Yahoo), 465 for SSL",
+            )
+            test_target = st.text_input(
+                "Send Test Email To",
+                value=cfg_user if cfg_user else "",
+                placeholder="test@example.com",
+            )
+
+        btn_c1, btn_c2 = st.columns(2)
+        with btn_c1:
+            if st.button("💾 Save Credentials", use_container_width=True):
+                st.session_state["smtp_overrides"] = {
+                    "username": cfg_user.strip(),
+                    "password": cfg_pass.strip(),
+                    "sender_name": cfg_name.strip(),
+                    "host": cfg_host.strip(),
+                    "port": int(cfg_port),
+                }
+                st.success("✓ SMTP credentials saved for this session!")
+                st.rerun()
+
+        with btn_c2:
+            if st.button("🔌 Test Connection & Send Test Email", use_container_width=True):
+                if not cfg_user or not cfg_pass:
+                    st.error("❌ Please fill in both Sender Email and App Password before testing.")
+                else:
+                    test_cfg = SMTPConfig(
+                        host=cfg_host.strip(),
+                        port=int(cfg_port),
+                        username=cfg_user.strip(),
+                        password=cfg_pass.strip(),
+                        sender_name=cfg_name.strip(),
+                    )
+                    try:
+                        with st.spinner("Connecting to SMTP server & verifying credentials..."):
+                            sender = EmailSender(test_cfg)
+                            sender.connect()
+                            target = test_target.strip() if test_target.strip() else cfg_user.strip()
+                            sender.send(
+                                target,
+                                "DV Analytics — SMTP Connection Test",
+                                f"Hello!\n\nThis is a verification email confirming that your DV Analytics Certificate delivery system is connected and working perfectly.\n\nSender: {cfg_name} <{cfg_user}>\nHost: {cfg_host}:{cfg_port}\nTimestamp: {datetime.now().strftime('%d-%b-%Y %H:%M:%S')}",
+                            )
+                            sender.close()
+                        # Save on success
+                        st.session_state["smtp_overrides"] = {
+                            "username": cfg_user.strip(),
+                            "password": cfg_pass.strip(),
+                            "sender_name": cfg_name.strip(),
+                            "host": cfg_host.strip(),
+                            "port": int(cfg_port),
+                        }
+                        st.success(f"✅ Success! SMTP connected and test email sent to `{target}`.")
+                        st.rerun()
+                    except smtplib.SMTPAuthenticationError as auth_err:
+                        st.error(f"❌ Authentication Failed: {auth_err}. For Gmail, make sure you are using a 16-character **Google App Password** (not your regular Gmail password).")
+                    except Exception as err:
+                        st.error(f"❌ Connection failed: {err}")
+
     card_end()
 
     card_start("2. Course-Adaptive Email Templates (Auto-Configured & Ready)", "Official DV Analytics email templates with automatic course detection and personalized student details.")

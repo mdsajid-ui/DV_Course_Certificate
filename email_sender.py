@@ -1,10 +1,3 @@
-"""
-email_sender.py
-----------------
-Handles SMTP email delivery with certificate attachments.
-Credentials are read from environment variables only — never hardcoded.
-"""
-
 import os
 import re
 import smtplib
@@ -23,14 +16,34 @@ def is_valid_email(email: str) -> bool:
 
 
 class SMTPConfig:
-    """Loads SMTP credentials/settings from Streamlit secrets or environment variables."""
+    """Loads SMTP credentials/settings from session state, Streamlit secrets, or environment variables."""
 
-    def __init__(self):
-        self.host = get_secret("SMTP_HOST", "smtp.gmail.com")
-        self.port = int(get_secret("SMTP_PORT", "587"))
-        self.username = get_secret("SMTP_EMAIL", "")
-        self.password = get_secret("SMTP_PASSWORD", "")
-        self.sender_name = get_secret("SMTP_SENDER_NAME", "DV Analytics Team")
+    def __init__(
+        self,
+        host: str = None,
+        port: int = None,
+        username: str = None,
+        password: str = None,
+        sender_name: str = None,
+    ):
+        sess_smtp = {}
+        try:
+            import streamlit as st
+            if hasattr(st, "session_state"):
+                sess_smtp = st.session_state.get("smtp_overrides", {})
+        except Exception:
+            sess_smtp = {}
+
+        self.host = host or sess_smtp.get("host") or get_secret("SMTP_HOST", "smtp.gmail.com")
+        raw_port = port or sess_smtp.get("port") or get_secret("SMTP_PORT", "587")
+        try:
+            self.port = int(raw_port)
+        except (ValueError, TypeError):
+            self.port = 587
+
+        self.username = (username or sess_smtp.get("username") or get_secret("SMTP_EMAIL", "")).strip()
+        self.password = (password or sess_smtp.get("password") or get_secret("SMTP_PASSWORD", "")).strip()
+        self.sender_name = sender_name or sess_smtp.get("sender_name") or get_secret("SMTP_SENDER_NAME", "DV Analytics Team")
 
     def is_configured(self) -> bool:
         return bool(self.username and self.password)
@@ -45,13 +58,22 @@ class EmailSender:
         """Open a single SMTP connection to reuse across a batch send."""
         if not self.config.is_configured():
             raise RuntimeError(
-                "SMTP credentials are not configured. Set SMTP_EMAIL and "
-                "SMTP_PASSWORD as environment variables (see .env.example)."
+                "SMTP credentials are not configured. Please provide Sender Email and App Password in Tab ③."
             )
+
         context = ssl.create_default_context()
-        self._server = smtplib.SMTP(self.config.host, self.config.port, timeout=30)
-        self._server.starttls(context=context)
-        self._server.login(self.config.username, self.config.password)
+        # Support port 465 (Direct SSL) and port 587/25 (STARTTLS)
+        if self.config.port == 465:
+            self._server = smtplib.SMTP_SSL(self.config.host, self.config.port, context=context, timeout=30)
+        else:
+            self._server = smtplib.SMTP(self.config.host, self.config.port, timeout=30)
+            self._server.ehlo()
+            self._server.starttls(context=context)
+            self._server.ehlo()
+
+        # Clean spaces from app passwords (e.g. Google's 4-char spaced blocks)
+        cleaned_password = self.config.password.replace(" ", "").strip()
+        self._server.login(self.config.username.strip(), cleaned_password)
         return self
 
     def close(self):
@@ -75,8 +97,8 @@ class EmailSender:
 
         msg = EmailMessage()
         msg["Subject"] = subject
-        msg["From"] = f"{self.config.sender_name} <{self.config.username}>"
-        msg["To"] = to_email
+        msg["From"] = f"{self.config.sender_name} <{self.config.username.strip()}>"
+        msg["To"] = to_email.strip()
         msg.set_content(body)
 
         if attachment_path and os.path.exists(attachment_path):
@@ -88,9 +110,9 @@ class EmailSender:
             )
 
         if self._server is None:
-            # Fallback: open a fresh connection for a one-off send
-            with self.connect():
+            # Open and close single-use connection safely
+            with self:
                 self._server.send_message(msg)
-                self.close()
         else:
             self._server.send_message(msg)
+
