@@ -34,14 +34,14 @@ class SMTPConfig:
         except Exception:
             sess_smtp = {}
 
-        self.host = host or sess_smtp.get("host") or get_secret("SMTP_HOST", "smtp.gmail.com")
+        self.host = host or sess_smtp.get("host") or get_secret("SMTP_HOST", "smtp.office365.com")
         raw_port = port or sess_smtp.get("port") or get_secret("SMTP_PORT", "587")
         try:
             self.port = int(raw_port)
         except (ValueError, TypeError):
             self.port = 587
 
-        self.username = (username or sess_smtp.get("username") or get_secret("SMTP_EMAIL", "")).strip()
+        self.username = (username or sess_smtp.get("username") or get_secret("SMTP_EMAIL", "md.sajid@dvdataanalytics.com")).strip()
         self.password = (password or sess_smtp.get("password") or get_secret("SMTP_PASSWORD", "")).strip()
         self.sender_name = sender_name or sess_smtp.get("sender_name") or get_secret("SMTP_SENDER_NAME", "DV Analytics Team")
 
