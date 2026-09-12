@@ -70,9 +70,10 @@ def login():
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         #MainMenu, footer, [data-testid="stHeader"], [data-testid="stToolbar"] { display:none !important; }
         html, body, [class*="css"] { font-family:'Inter',sans-serif; }
-        .stApp { background:#0b0b09; min-height:100vh; color:#fff; }
+        .stApp { background:#040404; min-height:100vh; color:#fff; transition: background 0.45s ease; }
         .block-container { max-width:1080px !important; padding:2vh 28px 30px !important; }
-        .lamp-heading { text-align:center; margin-bottom:24px; }
+        
+        .lamp-heading { text-align:center; margin-bottom:24px; transition: opacity 0.45s ease, filter 0.45s ease; }
         .lamp-heading h1 { margin:0; color:#f7f7f3; font-size:clamp(28px,4vw,44px); letter-spacing:-1px; font-weight:700; }
         .lamp-heading h1 span { color:#ffe000; font-weight:800; }
         .lamp-heading p { color:#88877f; margin:8px 0 0; font-size:13px; letter-spacing:.08em; text-transform:uppercase; font-weight:600; }
@@ -87,10 +88,10 @@ def login():
             margin: 0 !important;
         }
         .lamp-stage { height:470px; position:relative; overflow:hidden; }
-        .lamp-glow { position:absolute; width:390px; height:390px; left:50%; top:77px; transform:translateX(-50%); background:radial-gradient(ellipse at 50% 15%,rgba(255,225,92,.42),rgba(255,212,55,.12) 43%,transparent 70%); filter:blur(5px); animation:breathe 3s ease-in-out infinite; transition:opacity .35s ease; pointer-events:none; }
-        .light-cone { position:absolute; left:50%; top:126px; transform:translateX(-50%); width:330px; height:285px; background:linear-gradient(100deg,transparent 3%,rgba(255,226,116,.30) 48%,rgba(255,240,162,.17) 75%,transparent 97%); clip-path:polygon(39% 0,61% 0,100% 100%,0 100%); filter:blur(2px); transition:opacity .35s ease; pointer-events:none; }
+        .lamp-glow { position:absolute; width:390px; height:390px; left:50%; top:77px; transform:translateX(-50%); background:radial-gradient(ellipse at 50% 15%,rgba(255,225,92,.42),rgba(255,212,55,.12) 43%,transparent 70%); filter:blur(5px); animation:breathe 3s ease-in-out infinite; transition:opacity .4s ease; pointer-events:none; }
+        .light-cone { position:absolute; left:50%; top:126px; transform:translateX(-50%); width:330px; height:285px; background:linear-gradient(100deg,transparent 3%,rgba(255,226,116,.30) 48%,rgba(255,240,162,.17) 75%,transparent 97%); clip-path:polygon(39% 0,61% 0,100% 100%,0 100%); filter:blur(2px); transition:opacity .4s ease; pointer-events:none; }
         
-        /* Lamp OFF State via pure CSS */
+        /* ---------- Lamp OFF State (Default) ---------- */
         .lamp-checkbox:not(:checked) + .lamp-stage .lamp-glow,
         .lamp-checkbox:not(:checked) + .lamp-stage .light-cone,
         .lamp-checkbox:not(:checked) + .lamp-stage .fly {
@@ -98,11 +99,42 @@ def login():
             animation:none !important;
         }
         .lamp-checkbox:not(:checked) + .lamp-stage .shade {
-            border-bottom-color:#25251f !important;
+            border-bottom-color:#20201a !important;
             box-shadow:none !important;
         }
 
-        /* Lamp ON State */
+        /* Blackout UI when Lamp is OFF */
+        :root:has(#lamp-toggle:not(:checked)) .stApp,
+        body:has(#lamp-toggle:not(:checked)) .stApp {
+            background:#020202 !important;
+        }
+        :root:has(#lamp-toggle:not(:checked)) [data-testid="stForm"],
+        body:has(#lamp-toggle:not(:checked)) [data-testid="stForm"] {
+            opacity:0 !important;
+            pointer-events:none !important;
+            transform:translateY(16px) scale(0.96) !important;
+            filter:blur(8px) brightness(0) !important;
+            box-shadow:none !important;
+        }
+        :root:has(#lamp-toggle:not(:checked)) .lamp-heading,
+        body:has(#lamp-toggle:not(:checked)) .lamp-heading {
+            opacity:0.18 !important;
+            filter:blur(1.5px) grayscale(1) !important;
+        }
+        :root:has(#lamp-toggle:not(:checked)) .login-footer,
+        body:has(#lamp-toggle:not(:checked)) .login-footer {
+            opacity:0 !important;
+        }
+        .lamp-checkbox:not(:checked) + .lamp-stage .lamp-pull-hint {
+            opacity:1 !important;
+            transform:translate(-50%, 0) !important;
+        }
+
+        /* ---------- Lamp ON State ---------- */
+        :root:has(#lamp-toggle:checked) .stApp,
+        body:has(#lamp-toggle:checked) .stApp {
+            background:#0b0b09 !important;
+        }
         .lamp-checkbox:checked + .lamp-stage .lamp-glow {
             opacity:1 !important;
         }
@@ -113,6 +145,26 @@ def login():
             border-bottom:5px solid #5f5633 !important;
             box-shadow:0 8px 28px rgba(255,220,65,.33) !important;
         }
+        :root:has(#lamp-toggle:checked) [data-testid="stForm"],
+        body:has(#lamp-toggle:checked) [data-testid="stForm"] {
+            opacity:1 !important;
+            pointer-events:auto !important;
+            transform:translateY(0) scale(1) !important;
+            filter:blur(0) brightness(1) !important;
+        }
+        :root:has(#lamp-toggle:checked) .lamp-heading,
+        body:has(#lamp-toggle:checked) .lamp-heading {
+            opacity:1 !important;
+            filter:blur(0) grayscale(0) !important;
+        }
+        :root:has(#lamp-toggle:checked) .login-footer,
+        body:has(#lamp-toggle:checked) .login-footer {
+            opacity:1 !important;
+        }
+        .lamp-checkbox:checked + .lamp-stage .lamp-pull-hint {
+            opacity:0 !important;
+            pointer-events:none !important;
+        }
 
         .shade { position:absolute; z-index:3; left:50%; top:94px; transform:translateX(-50%); width:155px; height:55px; border-radius:80px 80px 10px 10px; background:linear-gradient(#080807,#181711); border-bottom:5px solid #5f5633; box-shadow:0 8px 28px rgba(255,220,65,.33); transition:all .35s ease; }
         .stem { position:absolute; z-index:3; left:calc(50% - 3px); top:146px; width:6px; height:239px; background:linear-gradient(90deg,#171714,#75705c,#151513); }
@@ -122,22 +174,41 @@ def login():
             position:absolute; z-index:100; left:calc(50% + 51px); top:136px; width:4px; height:85px; 
             background:linear-gradient(#93865c, #cbb96f); transform-origin:top center; 
             animation:sway 3.2s ease-in-out infinite; cursor:pointer; 
-            transition:transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transition:transform 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             display:block;
+            padding:0 12px;
+            margin-left:-12px;
         }
-        .cord:hover { filter: drop-shadow(0 0 10px #ffe000); }
+        .cord:hover { filter: drop-shadow(0 0 12px #ffe000); }
         .cord:after { 
-            content:''; position:absolute; left:-8px; bottom:-18px; width:20px; height:26px; 
+            content:''; position:absolute; left:4px; bottom:-18px; width:20px; height:26px; 
             border-radius:50%; background:radial-gradient(circle at 35% 35%, #fff176, #cbb96f 60%, #746a42); 
-            box-shadow:0 4px 12px rgba(0,0,0,0.7), 0 0 12px rgba(255,224,0,0.6); 
-            cursor:pointer; transition:transform 0.15s ease;
+            box-shadow:0 4px 14px rgba(0,0,0,0.8), 0 0 16px rgba(255,224,0,0.8); 
+            cursor:pointer; transition:transform 0.18s ease;
+            animation:pulse-bead 2s infinite ease-in-out;
         }
-        .cord:hover:after { transform: scale(1.18); }
+        .cord:hover:after { transform: scale(1.22); }
         .cord:active { transform: translateY(32px) scaleY(1.35) !important; }
+
+        .lamp-pull-hint {
+            position:absolute; left:calc(50% + 51px); top:248px; transform:translateX(-50%);
+            background:rgba(255,224,0,0.12); border:1px solid rgba(255,224,0,0.35);
+            color:#ffe000; font-size:11px; font-weight:700; letter-spacing:0.04em;
+            padding:5px 12px; border-radius:20px; white-space:nowrap;
+            backdrop-filter:blur(8px); pointer-events:none;
+            transition:all 0.35s ease;
+            animation:hint-glow 2.4s ease-in-out infinite;
+        }
 
         .fly { position:absolute; z-index:5; width:5px; height:5px; border-radius:50%; background:#fff26a; box-shadow:0 0 5px #fff400,0 0 12px #d4ff00; animation:float 5s ease-in-out infinite; }
         .f1{left:16%;top:17%;}.f2{left:77%;top:25%;animation-delay:-1s}.f3{left:25%;top:70%;animation-delay:-2.2s}.f4{left:83%;top:74%;animation-delay:-3.4s}.f5{left:67%;top:51%;animation-delay:-4s}
-        [data-testid="stForm"] { background:linear-gradient(145deg,rgba(35,35,32,.98),rgba(23,23,21,.96)); border:1px solid #3c3b35; border-radius:22px; padding:32px 30px 26px; box-shadow:0 25px 65px rgba(0,0,0,.55),inset 0 1px rgba(255,255,255,.04); }
+        
+        [data-testid="stForm"] { 
+            background:linear-gradient(145deg,rgba(35,35,32,.98),rgba(23,23,21,.96)); 
+            border:1px solid #3c3b35; border-radius:22px; padding:32px 30px 26px; 
+            box-shadow:0 25px 65px rgba(0,0,0,.55),inset 0 1px rgba(255,255,255,.04); 
+            transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1), transform 0.45s cubic-bezier(0.4, 0, 0.2, 1), filter 0.45s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
         .card-head h2 { margin:0; font-size:30px; color:#fff; letter-spacing:-1px; }
         .card-head p { margin:7px 0 22px; color:#8f8e87; font-size:13px; }
         .stTextInput label { color:#b9b8b1 !important; font-size:12px !important; font-weight:600 !important; }
@@ -150,11 +221,14 @@ def login():
         [data-testid="stFormSubmitButton"] button { width:100%; min-height:50px; border:0; border-radius:10px; background:#ffe000; color:#13130f; font-size:15px; font-weight:800; box-shadow:0 8px 22px rgba(255,224,0,.18); transition:.2s; }
         [data-testid="stFormSubmitButton"] button:hover { background:#ffea3b; color:#000; transform:translateY(-1px); box-shadow:0 11px 28px rgba(255,224,0,.27); }
         .secure-note { text-align:center; color:#62615b; font-size:11px; margin-top:18px; }
-        .login-footer { text-align:center; color:#4f4e49; font-size:11px; margin-top:28px; }
+        .login-footer { text-align:center; color:#4f4e49; font-size:11px; margin-top:28px; transition:opacity 0.45s ease; }
+        
         @keyframes breathe{50%{opacity:.72;transform:translateX(-50%) scale(.96)}}
         @keyframes sway{50%{transform:rotate(3deg)}}
         @keyframes float{0%,100%{transform:translate(0,0);opacity:.35}50%{transform:translate(18px,-24px);opacity:1}}
-        @media(max-width:760px){.block-container{padding:20px 18px !important}.lamp-heading{margin-bottom:8px}.lamp-stage{height:280px}.shade{top:35px}.lamp-glow{top:20px;height:270px}.light-cone{top:67px;height:190px;width:260px}.stem{top:87px;height:150px}.base{top:234px}.cord{top:77px}.lamp-heading h1{font-size:28px}[data-testid="stHorizontalBlock"]{gap:.5rem}[data-testid="stForm"]{padding:26px 20px 22px}}
+        @keyframes pulse-bead{0%,100%{box-shadow:0 4px 14px rgba(0,0,0,0.8), 0 0 10px rgba(255,224,0,0.5)}50%{box-shadow:0 4px 18px rgba(0,0,0,0.9), 0 0 22px rgba(255,224,0,0.95)}}
+        @keyframes hint-glow{0%,100%{opacity:0.85;transform:translate(-50%,0)}50%{opacity:1;transform:translate(-50%,-4px);box-shadow:0 0 15px rgba(255,224,0,0.3)}}
+        @media(max-width:760px){.block-container{padding:20px 18px !important}.lamp-heading{margin-bottom:8px}.lamp-stage{height:280px}.shade{top:35px}.lamp-glow{top:20px;height:270px}.light-cone{top:67px;height:190px;width:260px}.stem{top:87px;height:150px}.base{top:234px}.cord{top:77px}.lamp-pull-hint{top:175px}.lamp-heading h1{font-size:28px}[data-testid="stHorizontalBlock"]{gap:.5rem}[data-testid="stForm"]{padding:26px 20px 22px}}
         </style>
         <div class="lamp-heading"><h1>DV ANALYTICS <span>CERTIFICATE</span></h1><p>Course Completion &amp; Verification Portal</p></div>
         """,
@@ -166,7 +240,7 @@ def login():
         st.markdown(
             """
             <div>
-                <input type="checkbox" id="lamp-toggle" class="lamp-checkbox" checked>
+                <input type="checkbox" id="lamp-toggle" class="lamp-checkbox">
                 <div class="lamp-stage">
                     <div class="lamp-glow"></div>
                     <div class="light-cone"></div>
@@ -174,6 +248,7 @@ def login():
                     <div class="stem"></div>
                     <div class="base"></div>
                     <label for="lamp-toggle" class="cord" title="Click or pull string to turn lamp ON/OFF"></label>
+                    <div class="lamp-pull-hint">👇 Pull string to turn ON</div>
                     <i class="fly f1"></i><i class="fly f2"></i><i class="fly f3"></i><i class="fly f4"></i><i class="fly f5"></i>
                 </div>
             </div>
