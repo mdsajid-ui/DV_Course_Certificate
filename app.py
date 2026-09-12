@@ -9,6 +9,7 @@ import os
 import io
 import re
 import zipfile
+import smtplib
 from datetime import datetime
 
 import pandas as pd
@@ -1482,9 +1483,22 @@ with tab3:
                         st.success(f"✅ Success! SMTP connected and test email sent to `{target}`.")
                         st.rerun()
                     except smtplib.SMTPAuthenticationError as auth_err:
-                        st.error(f"❌ Authentication Failed: {auth_err}. For Gmail, make sure you are using a 16-character **Google App Password** (not your regular Gmail password).")
+                        st.error(
+                            f"❌ **Authentication Failed (535):** Username or Password rejected by mail server.\n\n"
+                            f"• **If your domain ({cfg_user.split('@')[-1] if '@' in cfg_user else 'email'}) uses Google / Google Workspace (`smtp.gmail.com`):** "
+                            f"Google blocks standard account passwords. You **must generate a 16-letter App Password** from "
+                            f"[myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) and paste it here.\n"
+                            f"• **If using Custom Mail / cPanel / Webmail:** Ensure the SMTP Host (e.g. `mail.{cfg_user.split('@')[-1] if '@' in cfg_user else 'domain.com'}`) and Port (`465` for SSL or `587` for TLS) match your mail provider."
+                        )
                     except Exception as err:
-                        st.error(f"❌ Connection failed: {err}")
+                        err_str = str(err)
+                        if "535" in err_str or "auth" in err_str.lower():
+                            st.error(
+                                f"❌ **Authentication Failed:** Username or Password not accepted.\n\n"
+                                f"Please use a **16-character App Password** if on Google Workspace/Gmail, or verify your custom host/port settings."
+                            )
+                        else:
+                            st.error(f"❌ **SMTP Connection Failed:** {err}")
 
     card_end()
 
