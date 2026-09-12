@@ -171,28 +171,36 @@ def login():
         .base { position:absolute; z-index:4; left:50%; top:382px; transform:translateX(-50%); width:142px; height:12px; border-radius:50%; background:#11110f; box-shadow:0 3px 12px #000; }
         
         .cord { 
-            position:absolute; z-index:100; left:calc(50% + 51px); top:136px; width:4px; height:85px; 
-            background:linear-gradient(#93865c, #cbb96f); transform-origin:top center; 
+            position:absolute; z-index:100; left:calc(50% + 50px); top:136px; width:36px; height:95px; 
+            margin-left:-18px;
+            background:transparent;
+            transform-origin:top center; 
             animation:sway 3.2s ease-in-out infinite; cursor:pointer; 
             transition:transform 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             display:block;
-            padding:0 12px;
-            margin-left:-12px;
         }
-        .cord:hover { filter: drop-shadow(0 0 12px #ffe000); }
-        .cord:after { 
-            content:''; position:absolute; left:4px; bottom:-18px; width:20px; height:26px; 
-            border-radius:50%; background:radial-gradient(circle at 35% 35%, #fff176, #cbb96f 60%, #746a42); 
-            box-shadow:0 4px 14px rgba(0,0,0,0.8), 0 0 16px rgba(255,224,0,0.8); 
-            cursor:pointer; transition:transform 0.18s ease;
-            animation:pulse-bead 2s infinite ease-in-out;
+        .cord:hover { filter: drop-shadow(0 0 10px #ffe000); }
+        /* Slim golden chain wire */
+        .cord::before {
+            content:''; position:absolute; left:17px; top:0; width:2.5px; height:74px;
+            background:linear-gradient(180deg, #6c6343, #d4af37 65%, #bfa134);
+            box-shadow:0 0 2px rgba(0,0,0,0.6);
         }
-        .cord:hover:after { transform: scale(1.22); }
-        .cord:active { transform: translateY(32px) scaleY(1.35) !important; }
+        /* Shiny golden droplet bead */
+        .cord::after { 
+            content:''; position:absolute; left:10px; top:70px; width:16px; height:22px; 
+            border-radius:50% 50% 45% 45% / 60% 60% 40% 40%;
+            background:radial-gradient(circle at 35% 30%, #fff9a6, #e6c845 45%, #8c721c 90%); 
+            box-shadow:0 4px 12px rgba(0,0,0,0.8), 0 0 14px rgba(255,224,0,0.7); 
+            cursor:pointer; transition:transform 0.18s ease, box-shadow 0.18s ease;
+            animation:pulse-bead 2.2s infinite ease-in-out;
+        }
+        .cord:hover::after { transform: scale(1.2); box-shadow: 0 4px 16px rgba(0,0,0,0.9), 0 0 22px rgba(255,224,0,0.95); }
+        .cord:active { transform: translateY(32px) scaleY(1.3) !important; }
 
         .lamp-pull-hint {
-            position:absolute; left:calc(50% + 51px); top:248px; transform:translateX(-50%);
-            background:rgba(255,224,0,0.12); border:1px solid rgba(255,224,0,0.35);
+            position:absolute; left:calc(50% + 50px); top:248px; transform:translateX(-50%);
+            background:rgba(255,224,0,0.12); border:1px solid rgba(255,224,0,0.38);
             color:#ffe000; font-size:11px; font-weight:700; letter-spacing:0.04em;
             padding:5px 12px; border-radius:20px; white-space:nowrap;
             backdrop-filter:blur(8px); pointer-events:none;
