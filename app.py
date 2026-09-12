@@ -54,7 +54,7 @@ os.makedirs(VAULT_DIR, exist_ok=True)
 # Page config & modern theme
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="DV Analytics — Certificate & Email Suite",
+    page_title="DV Analytics — Course Completion Certificate",
     page_icon="🎓",
     layout="wide",
 )
@@ -144,7 +144,7 @@ def login():
         else:
             st.error("❌ Invalid username or password")
 
-    st.markdown('<div class="login-footer">© 2026 DV Analytics · Certificate &amp; Email Automation Suite</div>', unsafe_allow_html=True)
+    st.markdown('<div class="login-footer">© 2026 DV Analytics · Course Completion Certificate Automation</div>', unsafe_allow_html=True)
 
     return st.session_state.get("logged_in", False)
 
@@ -442,8 +442,8 @@ st.markdown(
         <div class="dv-hero-left">
             <div class="mark">DV</div>
             <div>
-                <h1>Certificate &amp; Email Suite</h1>
-                <p>Automated certificate generation and personalized email delivery</p>
+                <h1>DV ANALYTICS COURSE COMPLETION CERTIFICATE</h1>
+                <p>Automated certificate generation, security locking, and personalized email delivery</p>
             </div>
         </div>
         <div class="dv-hero-pill"><span class="dot"></span> DV Analytics Workspace</div>
@@ -531,7 +531,7 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
-    st.caption("DV Analytics · Certificate & Email Automation Suite")
+    st.caption("DV Analytics · Course Completion Certificate")
 
 
 # ---------------------------------------------------------------------------
