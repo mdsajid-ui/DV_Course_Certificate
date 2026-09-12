@@ -71,35 +71,70 @@ def login():
         #MainMenu, footer, [data-testid="stHeader"], [data-testid="stToolbar"] { display:none !important; }
         html, body, [class*="css"] { font-family:'Inter',sans-serif; }
         .stApp { background:#0b0b09; min-height:100vh; color:#fff; }
-        .block-container { max-width:1080px !important; padding:6vh 28px 30px !important; }
-        .lamp-heading { text-align:center; margin-bottom:34px; }
-        .lamp-heading h1 { margin:0; color:#f7f7f3; font-size:clamp(32px,4.5vw,54px); letter-spacing:-2px; font-weight:500; }
-        .lamp-heading h1 span { color:#ffe000; font-weight:600; }
-        .lamp-heading p { color:#88877f; margin:10px 0 0; font-size:14px; letter-spacing:.06em; text-transform:uppercase; }
+        .block-container { max-width:1080px !important; padding:2vh 28px 30px !important; }
+        .lamp-heading { text-align:center; margin-bottom:24px; }
+        .lamp-heading h1 { margin:0; color:#f7f7f3; font-size:clamp(28px,4vw,44px); letter-spacing:-1px; font-weight:700; }
+        .lamp-heading h1 span { color:#ffe000; font-weight:800; }
+        .lamp-heading p { color:#88877f; margin:8px 0 0; font-size:13px; letter-spacing:.08em; text-transform:uppercase; font-weight:600; }
         [data-testid="stHorizontalBlock"] { align-items:center; gap:3rem; }
+        
+        .lamp-checkbox {
+            position: absolute !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            width: 0 !important;
+            height: 0 !important;
+            margin: 0 !important;
+        }
         .lamp-stage { height:470px; position:relative; overflow:hidden; }
-        .lamp-glow { position:absolute; width:390px; height:390px; left:50%; top:77px; transform:translateX(-50%); background:radial-gradient(ellipse at 50% 15%,rgba(255,225,92,.42),rgba(255,212,55,.12) 43%,transparent 70%); filter:blur(5px); animation:breathe 3s ease-in-out infinite; transition:opacity .35s ease; }
-        .light-cone { position:absolute; left:50%; top:126px; transform:translateX(-50%); width:330px; height:285px; background:linear-gradient(100deg,transparent 3%,rgba(255,226,116,.30) 48%,rgba(255,240,162,.17) 75%,transparent 97%); clip-path:polygon(39% 0,61% 0,100% 100%,0 100%); filter:blur(2px); transition:opacity .35s ease; }
-        .lamp-stage.lamp-off .lamp-glow, .lamp-stage.lamp-off .light-cone, .lamp-stage.lamp-off .fly { opacity:0 !important; animation:none; }
-        .lamp-stage.lamp-off .shade { border-bottom-color:#25251f; box-shadow:none; }
-        .shade { position:absolute; z-index:3; left:50%; top:94px; transform:translateX(-50%); width:155px; height:55px; border-radius:80px 80px 10px 10px; background:linear-gradient(#080807,#181711); border-bottom:5px solid #5f5633; box-shadow:0 8px 28px rgba(255,220,65,.33); }
+        .lamp-glow { position:absolute; width:390px; height:390px; left:50%; top:77px; transform:translateX(-50%); background:radial-gradient(ellipse at 50% 15%,rgba(255,225,92,.42),rgba(255,212,55,.12) 43%,transparent 70%); filter:blur(5px); animation:breathe 3s ease-in-out infinite; transition:opacity .35s ease; pointer-events:none; }
+        .light-cone { position:absolute; left:50%; top:126px; transform:translateX(-50%); width:330px; height:285px; background:linear-gradient(100deg,transparent 3%,rgba(255,226,116,.30) 48%,rgba(255,240,162,.17) 75%,transparent 97%); clip-path:polygon(39% 0,61% 0,100% 100%,0 100%); filter:blur(2px); transition:opacity .35s ease; pointer-events:none; }
+        
+        /* Lamp OFF State via pure CSS */
+        .lamp-checkbox:not(:checked) + .lamp-stage .lamp-glow,
+        .lamp-checkbox:not(:checked) + .lamp-stage .light-cone,
+        .lamp-checkbox:not(:checked) + .lamp-stage .fly {
+            opacity:0 !important;
+            animation:none !important;
+        }
+        .lamp-checkbox:not(:checked) + .lamp-stage .shade {
+            border-bottom-color:#25251f !important;
+            box-shadow:none !important;
+        }
+
+        /* Lamp ON State */
+        .lamp-checkbox:checked + .lamp-stage .lamp-glow {
+            opacity:1 !important;
+        }
+        .lamp-checkbox:checked + .lamp-stage .light-cone {
+            opacity:1 !important;
+        }
+        .lamp-checkbox:checked + .lamp-stage .shade {
+            border-bottom:5px solid #5f5633 !important;
+            box-shadow:0 8px 28px rgba(255,220,65,.33) !important;
+        }
+
+        .shade { position:absolute; z-index:3; left:50%; top:94px; transform:translateX(-50%); width:155px; height:55px; border-radius:80px 80px 10px 10px; background:linear-gradient(#080807,#181711); border-bottom:5px solid #5f5633; box-shadow:0 8px 28px rgba(255,220,65,.33); transition:all .35s ease; }
         .stem { position:absolute; z-index:3; left:calc(50% - 3px); top:146px; width:6px; height:239px; background:linear-gradient(90deg,#171714,#75705c,#151513); }
         .base { position:absolute; z-index:4; left:50%; top:382px; transform:translateX(-50%); width:142px; height:12px; border-radius:50%; background:#11110f; box-shadow:0 3px 12px #000; }
+        
         .cord { 
-            position:absolute; z-index:10; left:calc(50% + 51px); top:136px; width:3px; height:80px; 
+            position:absolute; z-index:100; left:calc(50% + 51px); top:136px; width:4px; height:85px; 
             background:linear-gradient(#93865c, #cbb96f); transform-origin:top center; 
             animation:sway 3.2s ease-in-out infinite; cursor:pointer; 
-            transition:transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), filter 0.2s;
+            transition:transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display:block;
         }
-        .cord:hover { filter: drop-shadow(0 0 8px rgba(255, 224, 0, 0.9)); }
+        .cord:hover { filter: drop-shadow(0 0 10px #ffe000); }
         .cord:after { 
-            content:''; position:absolute; left:-7px; bottom:-16px; width:17px; height:22px; 
+            content:''; position:absolute; left:-8px; bottom:-18px; width:20px; height:26px; 
             border-radius:50%; background:radial-gradient(circle at 35% 35%, #fff176, #cbb96f 60%, #746a42); 
-            box-shadow:0 4px 10px rgba(0,0,0,0.6), 0 0 10px rgba(255,224,0,0.5); 
+            box-shadow:0 4px 12px rgba(0,0,0,0.7), 0 0 12px rgba(255,224,0,0.6); 
             cursor:pointer; transition:transform 0.15s ease;
         }
-        .cord:hover:after { transform: scale(1.15); }
-        .cord.pulled { transform: translateY(28px) scaleY(1.25) !important; }
+        .cord:hover:after { transform: scale(1.18); }
+        .cord:active { transform: translateY(32px) scaleY(1.35) !important; }
+
         .fly { position:absolute; z-index:5; width:5px; height:5px; border-radius:50%; background:#fff26a; box-shadow:0 0 5px #fff400,0 0 12px #d4ff00; animation:float 5s ease-in-out infinite; }
         .f1{left:16%;top:17%;}.f2{left:77%;top:25%;animation-delay:-1s}.f3{left:25%;top:70%;animation-delay:-2.2s}.f4{left:83%;top:74%;animation-delay:-3.4s}.f5{left:67%;top:51%;animation-delay:-4s}
         [data-testid="stForm"] { background:linear-gradient(145deg,rgba(35,35,32,.98),rgba(23,23,21,.96)); border:1px solid #3c3b35; border-radius:22px; padding:32px 30px 26px; box-shadow:0 25px 65px rgba(0,0,0,.55),inset 0 1px rgba(255,255,255,.04); }
@@ -119,9 +154,9 @@ def login():
         @keyframes breathe{50%{opacity:.72;transform:translateX(-50%) scale(.96)}}
         @keyframes sway{50%{transform:rotate(3deg)}}
         @keyframes float{0%,100%{transform:translate(0,0);opacity:.35}50%{transform:translate(18px,-24px);opacity:1}}
-        @media(max-width:760px){.block-container{padding:30px 18px !important}.lamp-heading{margin-bottom:8px}.lamp-stage{height:280px}.shade{top:35px}.lamp-glow{top:20px;height:270px}.light-cone{top:67px;height:190px;width:260px}.stem{top:87px;height:150px}.base{top:234px}.cord{top:77px}.lamp-heading h1{font-size:35px}[data-testid="stHorizontalBlock"]{gap:.5rem}[data-testid="stForm"]{padding:26px 20px 22px}}
+        @media(max-width:760px){.block-container{padding:20px 18px !important}.lamp-heading{margin-bottom:8px}.lamp-stage{height:280px}.shade{top:35px}.lamp-glow{top:20px;height:270px}.light-cone{top:67px;height:190px;width:260px}.stem{top:87px;height:150px}.base{top:234px}.cord{top:77px}.lamp-heading h1{font-size:28px}[data-testid="stHorizontalBlock"]{gap:.5rem}[data-testid="stForm"]{padding:26px 20px 22px}}
         </style>
-        <div class="lamp-heading"><h1>DV Analytics <span>Certificate</span></h1><p>Course Completion &amp; Verification Portal</p></div>
+        <div class="lamp-heading"><h1>DV ANALYTICS <span>CERTIFICATE</span></h1><p>Course Completion &amp; Verification Portal</p></div>
         """,
         unsafe_allow_html=True,
     )
@@ -130,44 +165,18 @@ def login():
     with lamp_col:
         st.markdown(
             """
-            <div class="lamp-stage lamp-on" id="dv-lamp-stage">
-                <div class="lamp-glow"></div>
-                <div class="light-cone"></div>
-                <div class="shade"></div>
-                <div class="stem"></div>
-                <div class="base"></div>
-                <div class="cord" id="lamp-cord" title="Click or pull string to turn lamp ON/OFF"></div>
-                <i class="fly f1"></i><i class="fly f2"></i><i class="fly f3"></i><i class="fly f4"></i><i class="fly f5"></i>
+            <div>
+                <input type="checkbox" id="lamp-toggle" class="lamp-checkbox" checked>
+                <div class="lamp-stage">
+                    <div class="lamp-glow"></div>
+                    <div class="light-cone"></div>
+                    <div class="shade"></div>
+                    <div class="stem"></div>
+                    <div class="base"></div>
+                    <label for="lamp-toggle" class="cord" title="Click or pull string to turn lamp ON/OFF"></label>
+                    <i class="fly f1"></i><i class="fly f2"></i><i class="fly f3"></i><i class="fly f4"></i><i class="fly f5"></i>
+                </div>
             </div>
-            <script>
-            (function() {
-                function setupLampPull() {
-                    const cord = document.getElementById('lamp-cord');
-                    const stage = document.getElementById('dv-lamp-stage');
-                    if (!cord || !stage) {
-                        setTimeout(setupLampPull, 120);
-                        return;
-                    }
-                    function doPull(e) {
-                        if (e) e.preventDefault();
-                        cord.classList.add('pulled');
-                        setTimeout(function() {
-                            cord.classList.remove('pulled');
-                            if (stage.classList.contains('lamp-on')) {
-                                stage.classList.remove('lamp-on');
-                                stage.classList.add('lamp-off');
-                            } else {
-                                stage.classList.remove('lamp-off');
-                                stage.classList.add('lamp-on');
-                            }
-                        }, 180);
-                    }
-                    cord.onclick = doPull;
-                    cord.ontouchstart = doPull;
-                }
-                setupLampPull();
-            })();
-            </script>
             """,
             unsafe_allow_html=True,
         )
