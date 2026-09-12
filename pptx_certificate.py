@@ -270,8 +270,9 @@ def render_certificate_pdf(
     # Apply digital encryption, permission lock & calculate SHA-256 seal
     try:
         from pdf_security import lock_and_protect_pdf
-        lock_and_protect_pdf(output_pdf_path)
+        lock_and_protect_pdf(output_pdf_path, allow_print=False, dpi=300)
     except Exception:
         pass
 
     return output_pdf_path
+

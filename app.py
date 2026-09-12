@@ -621,7 +621,7 @@ def build_participant_cert(rec: dict, template_mode: str, default_course: str) -
     sha256_hash = ""
     try:
         from pdf_security import lock_and_protect_pdf
-        sha256_hash, _ = lock_and_protect_pdf(pdf_path)
+        sha256_hash, _ = lock_and_protect_pdf(pdf_path, allow_print=False, dpi=300)
         if sha256_hash:
             cert_store.store_pdf_security_hash(cert_number, sha256_hash)
     except Exception:
@@ -952,10 +952,13 @@ with tab2:
     else:
         st.markdown(
             """
-            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:12px 16px; margin-bottom:14px; font-size:13px; color:#1e40af;">
-                <strong>🛡️ High-Tight Digital Security Active:</strong>
-                All generated certificates are cryptographically locked with <strong>AES-256 encryption</strong> and permission restrictions.
-                Document editing, text modification, content copying, and page tampering are strictly disabled. Each certificate is registered with a unique <strong>SHA-256 digital seal</strong>.
+            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:14px 18px; margin-bottom:16px; font-size:13px; color:#1e40af;">
+                <div style="font-weight:700; font-size:14px; margin-bottom:4px;">🛡️ High-Tight Ironclad Digital Security Active:</div>
+                <ul style="margin:6px 0 0 16px; padding:0; line-height:1.6;">
+                    <li><strong>Pixel-Lock Flattening (300 DPI):</strong> All student names, course titles, dates, and certificate numbers are permanently baked into ultra-high-resolution image layers. Vector text and font streams are completely eliminated — no PDF editor (Adobe Acrobat, Illustrator, Nitro, Word, Canva) can select, edit, or manipulate any text.</li>
+                    <li><strong>AES-256 Zero-Permission Lock:</strong> Permission mask is locked to 0. Printing, Document Editing, Content Extraction, Form Filling, and Annotations are strictly disabled.</li>
+                    <li><strong>Cryptographic SHA-256 Seal:</strong> Each certificate receives an immutable digital provenance fingerprint stored in the registry for instant QR verification.</li>
+                </ul>
             </div>
             """,
             unsafe_allow_html=True,
@@ -1035,7 +1038,7 @@ with tab2:
                     "Email ID": info.get("Email"),
                     "Course": info.get("Course"),
                     "Certificate Number": info.get("CertNumber"),
-                    "Security Protection": "🔒 AES-256 Read-Only",
+                    "Security Protection": "🔒 Pixel-Locked 300 DPI · AES-256 Zero-Permission",
                     "Status": "✅ Ready & Locked" if info.get("Path") else f"❌ {info.get('Status')}",
                 })
             st.dataframe(pd.DataFrame(review_rows), use_container_width=True, height=240)

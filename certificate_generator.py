@@ -285,8 +285,9 @@ def generate_certificate(
     # Apply digital encryption, permission lock & calculate SHA-256 seal
     try:
         from pdf_security import lock_and_protect_pdf
-        lock_and_protect_pdf(output_path)
+        lock_and_protect_pdf(output_path, allow_print=False, dpi=300)
     except Exception:
         pass
 
     return output_path
+
