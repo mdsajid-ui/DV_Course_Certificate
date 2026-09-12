@@ -85,8 +85,21 @@ def login():
         .shade { position:absolute; z-index:3; left:50%; top:94px; transform:translateX(-50%); width:155px; height:55px; border-radius:80px 80px 10px 10px; background:linear-gradient(#080807,#181711); border-bottom:5px solid #5f5633; box-shadow:0 8px 28px rgba(255,220,65,.33); }
         .stem { position:absolute; z-index:3; left:calc(50% - 3px); top:146px; width:6px; height:239px; background:linear-gradient(90deg,#171714,#75705c,#151513); }
         .base { position:absolute; z-index:4; left:50%; top:382px; transform:translateX(-50%); width:142px; height:12px; border-radius:50%; background:#11110f; box-shadow:0 3px 12px #000; }
-        .cord { position:absolute; z-index:4; left:calc(50% + 51px); top:136px; width:2px; height:75px; background:#93865c; transform-origin:top; animation:sway 3.2s ease-in-out infinite; }
-        .cord:after { content:''; position:absolute; left:-5px; bottom:-12px; width:12px; height:17px; border-radius:50%; background:#cbb96f; box-shadow:inset 2px 0 4px #746a42; }
+        .cord { 
+            position:absolute; z-index:10; left:calc(50% + 51px); top:136px; width:3px; height:80px; 
+            background:linear-gradient(#93865c, #cbb96f); transform-origin:top center; 
+            animation:sway 3.2s ease-in-out infinite; cursor:pointer; 
+            transition:transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), filter 0.2s;
+        }
+        .cord:hover { filter: drop-shadow(0 0 8px rgba(255, 224, 0, 0.9)); }
+        .cord:after { 
+            content:''; position:absolute; left:-7px; bottom:-16px; width:17px; height:22px; 
+            border-radius:50%; background:radial-gradient(circle at 35% 35%, #fff176, #cbb96f 60%, #746a42); 
+            box-shadow:0 4px 10px rgba(0,0,0,0.6), 0 0 10px rgba(255,224,0,0.5); 
+            cursor:pointer; transition:transform 0.15s ease;
+        }
+        .cord:hover:after { transform: scale(1.15); }
+        .cord.pulled { transform: translateY(28px) scaleY(1.25) !important; }
         .fly { position:absolute; z-index:5; width:5px; height:5px; border-radius:50%; background:#fff26a; box-shadow:0 0 5px #fff400,0 0 12px #d4ff00; animation:float 5s ease-in-out infinite; }
         .f1{left:16%;top:17%;}.f2{left:77%;top:25%;animation-delay:-1s}.f3{left:25%;top:70%;animation-delay:-2.2s}.f4{left:83%;top:74%;animation-delay:-3.4s}.f5{left:67%;top:51%;animation-delay:-4s}
         [data-testid="stForm"] { background:linear-gradient(145deg,rgba(35,35,32,.98),rgba(23,23,21,.96)); border:1px solid #3c3b35; border-radius:22px; padding:32px 30px 26px; box-shadow:0 25px 65px rgba(0,0,0,.55),inset 0 1px rgba(255,255,255,.04); }
@@ -98,8 +111,6 @@ def login():
         .stTextInput [data-baseweb="input"]:focus-within { border-color:#ffe000 !important; box-shadow:0 0 0 2px rgba(255,224,0,.12) !important; }
         .stTextInput input { color:#ffe76a !important; -webkit-text-fill-color:#ffe76a !important; caret-color:#ffe000 !important; opacity:1 !important; }
         .stTextInput input::placeholder { color:#565650 !important; }
-        [data-testid="stToggle"] { max-width:180px; margin:0 auto -8px; }
-        [data-testid="stToggle"] label p { color:#d8d6c8 !important; font-size:13px !important; font-weight:600 !important; }
         .login-actions { display:flex; justify-content:space-between; color:#77766f; font-size:12px; margin:0 2px 13px; }
         [data-testid="stFormSubmitButton"] button { width:100%; min-height:50px; border:0; border-radius:10px; background:#ffe000; color:#13130f; font-size:15px; font-weight:800; box-shadow:0 8px 22px rgba(255,224,0,.18); transition:.2s; }
         [data-testid="stFormSubmitButton"] button:hover { background:#ffea3b; color:#000; transform:translateY(-1px); box-shadow:0 11px 28px rgba(255,224,0,.27); }
@@ -110,16 +121,56 @@ def login():
         @keyframes float{0%,100%{transform:translate(0,0);opacity:.35}50%{transform:translate(18px,-24px);opacity:1}}
         @media(max-width:760px){.block-container{padding:30px 18px !important}.lamp-heading{margin-bottom:8px}.lamp-stage{height:280px}.shade{top:35px}.lamp-glow{top:20px;height:270px}.light-cone{top:67px;height:190px;width:260px}.stem{top:87px;height:150px}.base{top:234px}.cord{top:77px}.lamp-heading h1{font-size:35px}[data-testid="stHorizontalBlock"]{gap:.5rem}[data-testid="stForm"]{padding:26px 20px 22px}}
         </style>
-        <div class="lamp-heading"><h1>Certificate Email <span>Automation</span></h1><p>DV Analytics · Secure Sign In</p></div>
+        <div class="lamp-heading"><h1>DV Analytics <span>Certificate</span></h1><p>Course Completion &amp; Verification Portal</p></div>
         """,
         unsafe_allow_html=True,
     )
 
     lamp_col, form_col = st.columns([1.12, 1], gap="large")
     with lamp_col:
-        lamp_on = st.toggle("Turn on lamp", value=True, key="login_lamp_on")
-        lamp_state = "lamp-on" if lamp_on else "lamp-off"
-        st.markdown(f'''<div class="lamp-stage {lamp_state}"><div class="lamp-glow"></div><div class="light-cone"></div><div class="shade"></div><div class="stem"></div><div class="base"></div><div class="cord"></div><i class="fly f1"></i><i class="fly f2"></i><i class="fly f3"></i><i class="fly f4"></i><i class="fly f5"></i></div>''', unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div class="lamp-stage lamp-on" id="dv-lamp-stage">
+                <div class="lamp-glow"></div>
+                <div class="light-cone"></div>
+                <div class="shade"></div>
+                <div class="stem"></div>
+                <div class="base"></div>
+                <div class="cord" id="lamp-cord" title="Click or pull string to turn lamp ON/OFF"></div>
+                <i class="fly f1"></i><i class="fly f2"></i><i class="fly f3"></i><i class="fly f4"></i><i class="fly f5"></i>
+            </div>
+            <script>
+            (function() {
+                function setupLampPull() {
+                    const cord = document.getElementById('lamp-cord');
+                    const stage = document.getElementById('dv-lamp-stage');
+                    if (!cord || !stage) {
+                        setTimeout(setupLampPull, 120);
+                        return;
+                    }
+                    function doPull(e) {
+                        if (e) e.preventDefault();
+                        cord.classList.add('pulled');
+                        setTimeout(function() {
+                            cord.classList.remove('pulled');
+                            if (stage.classList.contains('lamp-on')) {
+                                stage.classList.remove('lamp-on');
+                                stage.classList.add('lamp-off');
+                            } else {
+                                stage.classList.remove('lamp-off');
+                                stage.classList.add('lamp-on');
+                            }
+                        }, 180);
+                    }
+                    cord.onclick = doPull;
+                    cord.ontouchstart = doPull;
+                }
+                setupLampPull();
+            })();
+            </script>
+            """,
+            unsafe_allow_html=True,
+        )
 
     with form_col:
         with st.form("login_form", clear_on_submit=False):
