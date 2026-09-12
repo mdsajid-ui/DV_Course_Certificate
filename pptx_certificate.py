@@ -142,18 +142,16 @@ def _replace_span_across_runs(spans: List[_RunSpan], start: int, end: int, new_t
 
 def _replace_bracket_after_label(paragraph, label_pattern: str, new_value: str, field_desc: str) -> None:
     full_text, spans = _paragraph_runs_with_offsets(paragraph)
-    # Capture the *entire* bracket interior (including any whitespace) rather
-    # than trimming it outside the group — trimming outside meant an
-    # all-whitespace interior (the common case for a blank placeholder)
-    # collapsed to a zero-width match sitting exactly on a run boundary.
-    pattern = re.compile(label_pattern + r"\s*\[(.*?)\]", re.IGNORECASE | re.DOTALL)
+    # Match label followed by optional whitespace and the [ ... ] bracket block.
+    # Group 1 captures the entire bracket including '[' and ']' so they are completely removed.
+    pattern = re.compile(label_pattern + r"\s*(\[.*?\])", re.IGNORECASE | re.DOTALL)
     m = pattern.search(full_text)
     if not m:
         raise TemplateFieldNotFound(
             f"Could not locate the '{field_desc}' placeholder in the template. "
             f"Expected a pattern like '<label> [ ... ]'. Paragraph text was: {full_text!r}"
         )
-    _replace_span_across_runs(spans, m.start(1), m.end(1), f" {new_value} ")
+    _replace_span_across_runs(spans, m.start(1), m.end(1), f" {new_value.strip()}")
 
 
 def fill_certificate_text(prs: Presentation, *, name: str, certificate_number: str, completion_date: str) -> None:
