@@ -1399,19 +1399,45 @@ with tab3:
 
     # Interactive SMTP Credentials Form
     with st.expander("⚙️ Manage & Test SMTP Credentials", expanded=(not smtp_cfg.is_configured())):
+        st.markdown("**Select Your Email Service Provider:**")
+        prov_cols = st.columns(3)
+        with prov_cols[0]:
+            if st.button("🏢 Microsoft 365 / Outlook (dvdataanalytics.com)", use_container_width=True):
+                st.session_state["smtp_overrides"] = {
+                    **st.session_state.get("smtp_overrides", {}),
+                    "host": "smtp.office365.com",
+                    "port": 587,
+                }
+                st.rerun()
+        with prov_cols[1]:
+            if st.button("✉️ Gmail / Google Workspace", use_container_width=True):
+                st.session_state["smtp_overrides"] = {
+                    **st.session_state.get("smtp_overrides", {}),
+                    "host": "smtp.gmail.com",
+                    "port": 587,
+                }
+                st.rerun()
+        with prov_cols[2]:
+            if st.button("🌐 Custom SMTP / Port 465", use_container_width=True):
+                st.session_state["smtp_overrides"] = {
+                    **st.session_state.get("smtp_overrides", {}),
+                    "host": "mail.dvdataanalytics.com",
+                    "port": 465,
+                }
+                st.rerun()
+
         col_c1, col_c2 = st.columns(2)
         with col_c1:
             cfg_user = st.text_input(
                 "Sender Email Address",
                 value=st.session_state["smtp_overrides"].get("username", smtp_cfg.username),
-                placeholder="e.g. admin@dvanalytics.com or name@gmail.com",
+                placeholder="e.g. md.sajid@dvdataanalytics.com",
             )
             cfg_pass = st.text_input(
-                "Sender App Password / Token",
+                "Sender Password / App Password",
                 value=st.session_state["smtp_overrides"].get("password", smtp_cfg.password),
                 type="password",
-                placeholder="16-character Google App Password (e.g. abcd efgh ijkl mnop)",
-                help="For Gmail, use a 16-character App Password, NOT your personal account password.",
+                placeholder="Your email password or App Password",
             )
             cfg_name = st.text_input(
                 "Sender Display Name",
@@ -1419,16 +1445,18 @@ with tab3:
                 placeholder="e.g. DV Analytics Team",
             )
         with col_c2:
+            default_host = "smtp.office365.com" if "dvdataanalytics.com" in (cfg_user or "") else smtp_cfg.host
             cfg_host = st.text_input(
                 "SMTP Server Host",
-                value=st.session_state["smtp_overrides"].get("host", smtp_cfg.host),
-                placeholder="smtp.gmail.com",
+                value=st.session_state["smtp_overrides"].get("host", default_host),
+                placeholder="smtp.office365.com or smtp.gmail.com",
+                help="Use 'smtp.office365.com' for dvdataanalytics.com, or 'smtp.gmail.com' for Gmail",
             )
             cfg_port = st.number_input(
                 "SMTP Port",
                 value=int(st.session_state["smtp_overrides"].get("port", smtp_cfg.port)),
                 step=1,
-                help="587 for STARTTLS (Gmail/Outlook/Yahoo), 465 for SSL",
+                help="587 for STARTTLS (Office 365 / Gmail), 465 for SSL",
             )
             test_target = st.text_input(
                 "Send Test Email To",
