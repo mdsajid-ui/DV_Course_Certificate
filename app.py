@@ -155,170 +155,191 @@ if not st.session_state.get("logged_in", False):
 NAVY = "#0B1B4D"
 NAVY_DEEP = "#060F30"
 RED = "#EF233C"
-ACCENT = "#5B6CF7"
-ACCENT_2 = "#8A5CFF"
+ACCENT = "#4F46E5"
+ACCENT_2 = "#7C3AED"
+ACCENT_PINK = "#EC4899"
 GOLD = "#D4AF37"
-BG = "#F4F5FB"
+BG = "#F8FAFC"
 CARD = "#FFFFFF"
-BORDER = "#E7E9F6"
-MUTED = "#6B7188"
+BORDER = "#E2E8F0"
+MUTED = "#64748B"
 
 st.markdown(
     f"""
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        html, body, [class*="css"] {{ font-family: 'Inter', sans-serif; }}
+        html, body, [class*="css"] {{ font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; }}
         .stApp {{
             background:
-                radial-gradient(1000px 500px at 100% -5%, {ACCENT}14, transparent 55%),
-                radial-gradient(800px 500px at -5% 10%, {GOLD}10, transparent 50%),
+                radial-gradient(1200px 600px at 90% -10%, {ACCENT}12, transparent 60%),
+                radial-gradient(900px 500px at -10% 20%, {ACCENT_2}10, transparent 55%),
+                radial-gradient(800px 600px at 50% 100%, {ACCENT_PINK}08, transparent 50%),
                 {BG};
         }}
         #MainMenu, footer, header[data-testid="stHeader"] {{ visibility: hidden; }}
 
-        /* ---------- Hero ---------- */
+        /* ---------- Ultra Modern Hero Header ---------- */
         .dv-hero {{
             position: relative; overflow: hidden;
-            background: radial-gradient(130% 180% at 0% 0%, {ACCENT_2}3d 0%, transparent 45%),
-                        radial-gradient(120% 160% at 100% 100%, {RED}26 0%, transparent 40%),
-                        linear-gradient(120deg, {NAVY} 0%, {NAVY_DEEP} 100%);
-            padding: 32px 36px; border-radius: 22px; margin-bottom: 28px;
-            display: flex; align-items: center; justify-content: space-between; gap: 18px;
-            box-shadow: 0 20px 45px -18px rgba(11,27,77,0.55);
-            border: 1px solid rgba(255,255,255,.08);
+            background:
+                radial-gradient(130% 180% at 0% 0%, {ACCENT_2}55 0%, transparent 50%),
+                radial-gradient(120% 160% at 100% 100%, {RED}35 0%, transparent 45%),
+                linear-gradient(135deg, #090e24 0%, #0f172a 50%, #1e1b4b 100%);
+            padding: 34px 38px; border-radius: 24px; margin-bottom: 24px;
+            display: flex; align-items: center; justify-content: space-between; gap: 20px;
+            box-shadow: 0 24px 50px -15px rgba(15,23,42,0.65), inset 0 1px 1px rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.12);
         }}
-        .dv-hero-left {{ display: flex; align-items: center; gap: 18px; }}
+        .dv-hero-left {{ display: flex; align-items: center; gap: 20px; }}
         .dv-hero .mark {{
-            width: 54px; height: 54px; border-radius: 15px; flex-shrink: 0;
-            background: linear-gradient(135deg, {RED}, #ff7a7a);
+            width: 58px; height: 58px; border-radius: 18px; flex-shrink: 0;
+            background: linear-gradient(135deg, #f43f5e 0%, #e11d48 50%, #be123c 100%);
             display: flex; align-items: center; justify-content: center;
-            color: white; font-weight: 800; font-size: 20px; letter-spacing: -1px;
-            font-family: 'Poppins', sans-serif;
-            box-shadow: 0 8px 20px -4px {RED}aa, inset 0 1px 0 rgba(255,255,255,.25);
+            color: white; font-weight: 800; font-size: 22px; letter-spacing: -1px;
+            font-family: 'Outfit', sans-serif;
+            box-shadow: 0 10px 25px -5px rgba(225,29,72,0.6), inset 0 1px 1px rgba(255,255,255,0.35);
         }}
         .dv-hero h1 {{
-            color: white; font-size: 24px; margin: 0; font-family: 'Poppins', sans-serif; font-weight: 700;
-            letter-spacing: -.3px;
+            color: white; font-size: 25px; margin: 0; font-family: 'Outfit', sans-serif; font-weight: 700;
+            letter-spacing: -.4px; line-height: 1.2;
         }}
-        .dv-hero p {{ color: #B7BEEF; font-size: 13px; margin: 4px 0 0; }}
+        .dv-hero p {{ color: #cbd5e1; font-size: 13.5px; margin: 5px 0 0; font-weight: 400; }}
         .dv-hero-pill {{
-            display: flex; align-items: center; gap: 8px; color: #EAF0FF; font-size: 12.5px;
-            font-weight: 600; padding: 8px 14px; border-radius: 999px;
-            background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14);
-            backdrop-filter: blur(8px); white-space: nowrap;
+            display: flex; align-items: center; gap: 8px; color: #f8fafc; font-size: 12px;
+            font-weight: 600; padding: 7px 14px; border-radius: 999px;
+            background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+            backdrop-filter: blur(12px); white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }}
         .dv-hero-pill .dot {{
-            width: 7px; height: 7px; border-radius: 50%; background: #34d399;
-            box-shadow: 0 0 0 3px rgba(52,211,153,.25);
+            width: 8px; height: 8px; border-radius: 50%; background: #10b981;
+            box-shadow: 0 0 0 3px rgba(16,185,129,0.3);
         }}
 
-        /* ---------- Glass cards ---------- */
+        /* ---------- Frosted Glass Cards ---------- */
         .dv-card {{
-            background: linear-gradient(180deg, rgba(255,255,255,.9), rgba(255,255,255,.72));
-            border: 1px solid {BORDER}; border-radius: 18px;
-            padding: 24px 26px; margin-bottom: 20px;
-            box-shadow: 0 8px 24px -14px rgba(11,27,77,0.14);
-            backdrop-filter: blur(10px);
-            transition: box-shadow .2s ease;
+            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid rgba(226, 232, 240, 0.9); border-radius: 20px;
+            padding: 26px 28px; margin-bottom: 22px;
+            box-shadow: 0 10px 30px -10px rgba(15,23,42,0.06), 0 1px 3px rgba(15,23,42,0.03);
+            backdrop-filter: blur(16px);
+            transition: all .25s cubic-bezier(0.16, 1, 0.3, 1);
         }}
-        .dv-card:hover {{ box-shadow: 0 14px 34px -16px rgba(11,27,77,0.20); }}
+        .dv-card:hover {{
+            box-shadow: 0 20px 40px -15px rgba(15,23,42,0.10);
+            border-color: rgba(99, 102, 241, 0.3);
+        }}
         .dv-section-title {{
-            font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 17.5px;
-            color: {NAVY}; margin-bottom: 2px; display: flex; align-items: center; gap: 8px;
+            font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 18px;
+            color: #0f172a; margin-bottom: 2px; display: flex; align-items: center; gap: 10px;
+            letter-spacing: -0.2px;
         }}
         .dv-section-title:before {{
-            content: ""; display: inline-block; width: 6px; height: 18px; border-radius: 4px;
-            background: linear-gradient(180deg, {ACCENT}, {RED});
+            content: ""; display: inline-block; width: 5px; height: 20px; border-radius: 999px;
+            background: linear-gradient(180deg, #4f46e5, #ec4899);
         }}
-        .dv-section-sub {{ color: {MUTED}; font-size: 13px; margin: 4px 0 16px 14px; }}
+        .dv-section-sub {{ color: #64748b; font-size: 13px; margin: 4px 0 16px 15px; font-weight: 400; }}
 
-        /* ---------- Tabs as pill nav ---------- */
+        /* ---------- Modern Floating Tabs ---------- */
         div[data-testid="stTabs"] div[data-baseweb="tab-list"] {{
-            gap: 6px; background: rgba(11,27,77,.05); padding: 6px; border-radius: 14px;
-            border: 1px solid {BORDER};
+            gap: 8px; background: rgba(15, 23, 42, 0.04); padding: 7px; border-radius: 16px;
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
         }}
         div[data-testid="stTabs"] button[data-baseweb="tab"] {{
-            font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 13.5px;
-            color: {MUTED}; padding: 10px 18px; border-radius: 10px; transition: all .15s ease;
+            font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 600; font-size: 13.5px;
+            color: #64748b; padding: 10px 20px; border-radius: 12px; transition: all .2s ease;
+            border: none;
+        }}
+        div[data-testid="stTabs"] button[data-baseweb="tab"]:hover {{
+            color: #1e1b4b; background: rgba(255,255,255,0.6);
         }}
         div[data-testid="stTabs"] button[aria-selected="true"] {{
             color: white !important;
-            background: linear-gradient(135deg, {NAVY}, {ACCENT});
-            box-shadow: 0 6px 16px -6px {NAVY}99;
+            background: linear-gradient(135deg, #1e1b4b 0%, #4338ca 50%, #6366f1 100%) !important;
+            box-shadow: 0 8px 20px -6px rgba(67, 56, 202, 0.55), inset 0 1px 0 rgba(255,255,255,0.2) !important;
         }}
-        div[data-testid="stTabs"] button[aria-selected="true"] p {{ color: white !important; }}
+        div[data-testid="stTabs"] button[aria-selected="true"] p {{ color: white !important; font-weight: 700; }}
         div[data-testid="stTabs"] div[data-baseweb="tab-highlight"] {{ display: none; }}
         div[data-testid="stTabs"] div[data-baseweb="tab-border"] {{ display: none; }}
 
-        /* ---------- Metrics ---------- */
+        /* ---------- Bento-Box KPI Metrics ---------- */
         div[data-testid="stMetric"] {{
-            background: linear-gradient(180deg, #ffffff, #fbfbff);
-            border: 1px solid {BORDER}; border-radius: 16px;
-            padding: 16px 18px; box-shadow: 0 6px 18px -12px rgba(11,27,77,0.18);
-            border-top: 3px solid {ACCENT};
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            border: 1px solid #e2e8f0; border-radius: 16px;
+            padding: 16px 20px; box-shadow: 0 4px 16px -4px rgba(15,23,42,0.05);
+            border-top: 3.5px solid #6366f1;
+            transition: all .2s ease;
         }}
-        div[data-testid="stMetricLabel"] {{ color: {MUTED}; font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .3px; }}
-        div[data-testid="stMetricValue"] {{ color: {NAVY}; font-family: 'Poppins', sans-serif; font-weight: 700; }}
+        div[data-testid="stMetric"]:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -8px rgba(99, 102, 241, 0.15);
+            border-top-color: #4f46e5;
+        }}
+        div[data-testid="stMetricLabel"] {{ color: #64748b; font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .5px; }}
+        div[data-testid="stMetricValue"] {{ color: #0f172a; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 26px; }}
 
-        /* ---------- Advanced buttons ---------- */
+        /* ---------- Tactile CTA Buttons ---------- */
         .stButton>button {{
-            position: relative; overflow: hidden;
-            background: linear-gradient(135deg, {NAVY} 0%, {ACCENT} 55%, {ACCENT_2} 130%);
+            background: linear-gradient(135deg, #0f172a 0%, #312e81 40%, #4f46e5 100%);
             background-size: 200% auto;
-            color: white; border-radius: 12px; font-weight: 700; border: none;
-            padding: 0.68em 1.5em; font-family: 'Poppins', sans-serif; font-size: 14.5px;
-            box-shadow: 0 10px 24px -8px {NAVY}77, inset 0 1px 0 rgba(255,255,255,.18);
-            transition: all .22s ease; letter-spacing: .1px;
+            color: white; border-radius: 13px; font-weight: 700; border: none;
+            padding: 0.7em 1.6em; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 14px;
+            box-shadow: 0 10px 22px -6px rgba(49, 46, 129, 0.45), inset 0 1px 0 rgba(255,255,255,0.2);
+            transition: all .22s cubic-bezier(0.16, 1, 0.3, 1); letter-spacing: .1px;
         }}
         .stButton>button:hover {{
             transform: translateY(-2px); background-position: right center;
-            box-shadow: 0 16px 32px -10px {NAVY}99, inset 0 1px 0 rgba(255,255,255,.25); color: white;
+            box-shadow: 0 14px 28px -8px rgba(79, 70, 229, 0.6), inset 0 1px 0 rgba(255,255,255,0.3);
+            color: white;
         }}
         .stButton>button:active {{ transform: translateY(0px) scale(.99); }}
         .stButton>button:disabled {{
-            background: #DEE0EE; color: #9296AC; box-shadow: none; transform: none;
+            background: #e2e8f0; color: #94a3b8; box-shadow: none; transform: none;
         }}
         .stDownloadButton>button {{
-            background: white; color: {NAVY}; border: 1.5px solid {NAVY}2e; border-radius: 12px;
-            font-weight: 700; font-family: 'Poppins', sans-serif; font-size: 13.5px;
-            transition: all .18s ease; padding: 0.6em 1.2em;
+            background: #ffffff; color: #0f172a; border: 1.5px solid #cbd5e1; border-radius: 13px;
+            font-weight: 700; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13.5px;
+            transition: all .2s ease; padding: 0.65em 1.3em;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
         }}
         .stDownloadButton>button:hover {{
-            border-color: {ACCENT}; color: {ACCENT}; transform: translateY(-1px);
-            box-shadow: 0 8px 18px -10px {ACCENT}aa;
-        }}
-
-        /* Primary CTA buttons (generate / send) get an extra glow */
-        div[data-testid="stTabs"] .stButton>button[kind="secondary"],
-        button[kind="primary"] {{
-            background: linear-gradient(135deg, {RED} 0%, {ACCENT_2} 100%) !important;
+            border-color: #6366f1; color: #4f46e5; transform: translateY(-1px);
+            box-shadow: 0 8px 20px -8px rgba(99, 102, 241, 0.35);
         }}
 
         .dv-badge {{
-            display: inline-block; padding: 4px 13px; border-radius: 999px;
-            font-size: 12px; font-weight: 700; font-family: 'Poppins', sans-serif;
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 5px 14px; border-radius: 999px;
+            font-size: 12px; font-weight: 700; font-family: 'Plus Jakarta Sans', sans-serif;
             letter-spacing: .2px;
         }}
-        .dv-badge-ok {{ background: #E4F7EC; color: #128A44; }}
-        .dv-badge-warn {{ background: #FDECEC; color: {RED}; }}
+        .dv-badge-ok {{ background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }}
+        .dv-badge-warn {{ background: #fff1f2; color: #e11d48; border: 1px solid #fecdd3; }}
+        .dv-badge-info {{ background: #eef2ff; color: #4f46e5; border: 1px solid #c7d2fe; }}
 
         div[data-testid="stProgress"] > div > div {{
-            background: linear-gradient(90deg, {ACCENT}, {RED}); border-radius: 999px;
+            background: linear-gradient(90deg, #4f46e5, #ec4899); border-radius: 999px;
+            box-shadow: 0 2px 10px rgba(79, 70, 229, 0.4);
         }}
 
-        /* ---------- File uploader ---------- */
+        /* ---------- File Uploader ---------- */
         [data-testid="stFileUploaderDropzone"] {{
-            background: linear-gradient(180deg, #fbfbff, #f4f5fc) !important;
-            border: 1.5px dashed {ACCENT}55 !important; border-radius: 14px !important;
+            background: linear-gradient(180deg, #ffffff, #f8fafc) !important;
+            border: 2px dashed #cbd5e1 !important; border-radius: 16px !important;
+            transition: all .2s ease !important;
+        }}
+        [data-testid="stFileUploaderDropzone"]:hover {{
+            border-color: #6366f1 !important;
+            background: #f5f3ff !important;
         }}
 
         /* ---------- Sidebar ---------- */
         section[data-testid="stSidebar"] {{
-            background: linear-gradient(180deg, {NAVY_DEEP}, {NAVY}) !important;
+            background: linear-gradient(180deg, #090e24, #0f172a) !important;
         }}
-        section[data-testid="stSidebar"] * {{ color: #EAF0FF !important; }}
-        section[data-testid="stSidebar"] hr {{ border-color: rgba(255,255,255,.12) !important; }}
+        section[data-testid="stSidebar"] * {{ color: #e2e8f0 !important; }}
+        section[data-testid="stSidebar"] hr {{ border-color: rgba(255,255,255,.10) !important; }}
 
         /* ---------- Anti-Screenshot & Screen Capture Protection Shield ---------- */
         @media print {{
