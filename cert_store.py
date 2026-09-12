@@ -204,18 +204,44 @@ def get_by_cert_number(cert_number: str) -> Optional[CertificateRecord]:
         return _row_to_record(row) if row else None
 
 
-def _next_sequence(conn: sqlite3.Connection, bucket: str) -> int:
+def _next_sequence(conn: sqlite3.Connection, bucket: str, start_seq: int = 2075) -> int:
     row = conn.execute("SELECT next_seq FROM counters WHERE bucket = ?", (bucket,)).fetchone()
     if row is None:
-        conn.execute("INSERT INTO counters (bucket, next_seq) VALUES (?, 2)", (bucket,))
-        return 1
+        conn.execute("INSERT INTO counters (bucket, next_seq) VALUES (?, ?)", (bucket, start_seq + 1))
+        return start_seq
     seq = row["next_seq"]
     conn.execute("UPDATE counters SET next_seq = ? WHERE bucket = ?", (seq + 1, bucket))
     return seq
 
 
-def format_cert_number(institute_code: str, course_code: str, year: str, seq: int, width: int = 6) -> str:
-    return f"{institute_code}-{course_code}-{year}-{str(seq).zfill(width)}"
+def set_sequence_counter(bucket: str, next_seq: int) -> None:
+    """Sets the next sequence counter value for a bucket."""
+    with _lock, _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO counters (bucket, next_seq) VALUES (?, ?)
+            ON CONFLICT(bucket) DO UPDATE SET next_seq = excluded.next_seq
+            """,
+            (bucket, next_seq),
+        )
+
+
+def format_cert_number(
+    institute_code: str = "DVA",
+    batch_prefix: str = "202505",
+    seq: int = 2075,
+    course_code: str = "",
+    format_style: str = "COMPACT",
+) -> str:
+    """
+    Formats certificate sequence number.
+    Default COMPACT style produces exact sequence: 202505DVA2075, 202505DVA2076...
+    """
+    prefix = (batch_prefix or "202505").strip()
+    inst = (institute_code or "DVA").strip()
+    if format_style == "LEGACY" and course_code:
+        return f"{inst}-{course_code}-{prefix}-{str(seq).zfill(6)}"
+    return f"{prefix}{inst}{seq}"
 
 
 def issue_or_get_certificate_number(
@@ -223,30 +249,39 @@ def issue_or_get_certificate_number(
     name: str,
     email: str,
     course: str,
-    completion_date: Optional[str],
-    institute_code: str,
-    course_code: str,
-    year: str,
+    completion_date: Optional[str] = None,
+    institute_code: str = "DVA",
+    course_code: str = "APIDS",
+    year: str = "2025",
+    batch_prefix: Optional[str] = None,
+    start_seq: int = 2075,
+    format_style: str = "COMPACT",
     existing_number: Optional[str] = None,
 ) -> CertificateRecord:
     """
     Idempotent: if this (email, course) already has a certificate number,
     return the existing record untouched. Otherwise atomically allocate the
-    next sequence number for (institute_code, course_code, year) and persist
-    a new record. This is what guarantees "same number on regenerate/resend".
+    next sequence number (e.g. 202505DVA2075) and persist a new record.
     """
     key = student_key(email, course)
+    effective_prefix = (batch_prefix or year or "202505").strip()
     with _lock, _connect() as conn:
         row = conn.execute("SELECT * FROM certificates WHERE student_key = ?", (key,)).fetchone()
         if row:
             return _row_to_record(row)
 
-        bucket = f"{institute_code}|{course_code}|{year}"
+        bucket = f"{institute_code}|{course_code}|{effective_prefix}"
         if existing_number:
-            cert_number = existing_number
+            cert_number = existing_number.strip()
         else:
-            seq = _next_sequence(conn, bucket)
-            cert_number = format_cert_number(institute_code, course_code, year, seq)
+            seq = _next_sequence(conn, bucket, start_seq=start_seq)
+            cert_number = format_cert_number(
+                institute_code=institute_code,
+                batch_prefix=effective_prefix,
+                seq=seq,
+                course_code=course_code,
+                format_style=format_style,
+            )
             
         now = datetime.now(timezone.utc).isoformat()
         conn.execute(

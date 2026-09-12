@@ -491,7 +491,9 @@ defaults = {
         "DV Analytics Team"
     ),
     "institute_code": "DVA",
-    "cert_year": str(datetime.now().year),
+    "cert_batch_prefix": "202505",
+    "cert_start_seq": 2075,
+    "cert_year": "2025",
     "verification_base_url": os.environ.get("CERTIFICATE_VERIFICATION_BASE_URL", "http://localhost:8000"),
 }
 
@@ -554,15 +556,22 @@ def build_participant_cert(rec: dict, template_mode: str, default_course: str) -
     completion_date = rec.get("Completion Date") or datetime.now().strftime("%d-%b-%Y")
     existing_cert_no = rec.get("Certificate Number")
 
-    # Issue or retrieve authoritative number
+    # Issue or retrieve authoritative number (e.g. 202505DVA2075)
+    batch_pfx = st.session_state.get("cert_batch_prefix", "202505").strip() or "202505"
+    inst_code = st.session_state.get("institute_code", "DVA").strip() or "DVA"
+    start_num = int(st.session_state.get("cert_start_seq", 2075) or 2075)
+
     cert_record = cert_store.issue_or_get_certificate_number(
         name=name,
         email=email,
         course=course,
         completion_date=completion_date,
-        institute_code=st.session_state.institute_code.strip() or "DVA",
+        institute_code=inst_code,
         course_code=course.strip() or "APIDS",
-        year=st.session_state.cert_year.strip() or str(datetime.now().year),
+        year=batch_pfx,
+        batch_prefix=batch_pfx,
+        start_seq=start_num,
+        format_style="COMPACT",
         existing_number=existing_cert_no,
     )
     cert_number = cert_record.cert_number
@@ -859,7 +868,7 @@ with tab1:
             unsafe_allow_html=True,
         )
 
-        col_t1, col_t2 = st.columns(2)
+        col_t1, col_t2, col_t3 = st.columns(3)
         with col_t1:
             st.session_state.selected_official_course = st.selectbox(
                 "Course Template",
@@ -867,18 +876,44 @@ with tab1:
                 index=0 if st.session_state.selected_official_course == "APIDS" else 1,
                 help="APIDS = Advanced Program in Data Science, APDA = Advanced Program in Data Analytics",
             )
-            st.session_state.institute_code = st.text_input("Institute Code Prefix", value=st.session_state.institute_code)
+            st.session_state.cert_batch_prefix = st.text_input(
+                "Batch Prefix (Year/Month)",
+                value=st.session_state.get("cert_batch_prefix", "202505"),
+                help="e.g. 202505 (for May 2025) or 202609",
+            )
         with col_t2:
-            st.session_state.cert_year = st.text_input("Certificate Year", value=st.session_state.cert_year)
+            st.session_state.institute_code = st.text_input(
+                "Institute Code",
+                value=st.session_state.get("institute_code", "DVA"),
+                help="e.g. DVA",
+            )
+            st.session_state.cert_start_seq = st.number_input(
+                "Starting Sequence #",
+                min_value=1,
+                value=int(st.session_state.get("cert_start_seq", 2075)),
+                step=1,
+                help="Sequence will auto-increment from this number (e.g. 2075 -> 2076 -> 2077)",
+            )
+        with col_t3:
             st.session_state.verification_base_url = st.text_input(
                 "Verification Base URL (for QR Code)",
                 value=st.session_state.verification_base_url,
                 help="QR codes point to {this}/verify/{cert_number}",
             )
+            sample_seq = f"{st.session_state.cert_batch_prefix}{st.session_state.institute_code}{st.session_state.cert_start_seq}"
+            st.markdown(
+                f"""
+                <div style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:10px; padding:10px 14px; margin-top:24px; font-size:12.5px; color:#334155;">
+                    <strong>🎯 Auto Sequence Preview:</strong><br>
+                    <code>{sample_seq}</code>, <code>{st.session_state.cert_batch_prefix}{st.session_state.institute_code}{int(st.session_state.cert_start_seq)+1}</code>...
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
         st.caption(
             f"Active Template File: `assets/templates/certificate_{st.session_state.selected_official_course}_blank.pptx` · "
-            f"Automatic Numbering Format: `{st.session_state.institute_code}-{st.session_state.selected_official_course}-{st.session_state.cert_year}-000001`"
+            f"Auto Numbering Format: `{st.session_state.cert_batch_prefix}{st.session_state.institute_code}{st.session_state.cert_start_seq}`"
         )
 
     else:
