@@ -43,10 +43,12 @@ load_dotenv()
 
 OUTPUT_DIR = "output"
 CERT_DIR = os.path.join(OUTPUT_DIR, "certificates")
+VAULT_DIR = os.path.join("data", "issued_certificates")
 REPORT_PATH = os.path.join(OUTPUT_DIR, "Email_Sending_Report.xlsx")
 ERROR_REPORT_PATH = os.path.join(OUTPUT_DIR, "Error_Report.xlsx")
 
 os.makedirs(CERT_DIR, exist_ok=True)
+os.makedirs(VAULT_DIR, exist_ok=True)
 
 # ---------------------------------------------------------------------------
 # Page config & modern theme
@@ -636,7 +638,62 @@ def build_participant_cert(rec: dict, template_mode: str, default_course: str) -
     except Exception:
         pass
 
+    # Permanently archive copy to Vault
+    try:
+        vault_path = os.path.join(VAULT_DIR, f"{cert_number}.pdf")
+        shutil.copyfile(pdf_path, vault_path)
+    except Exception:
+        pass
+
     return cert_number, pdf_path, was_new, sha256_hash
+
+
+def ensure_cert_pdf_exists(record: cert_store.CertificateRecord) -> str:
+    """Returns valid path to certificate PDF, reconstructing from metadata if ever missing."""
+    cert_no = record.cert_number
+    vault_path = os.path.join(VAULT_DIR, f"{cert_no}.pdf")
+    cert_path = os.path.join(CERT_DIR, f"{cert_no}.pdf")
+
+    if os.path.exists(vault_path):
+        return vault_path
+    if os.path.exists(cert_path):
+        try:
+            shutil.copyfile(cert_path, vault_path)
+        except Exception:
+            pass
+        return cert_path
+
+    # Reconstruct on-the-fly if missing
+    course_clean = record.course.upper() if record.course.upper() in ("APIDS", "APDA") else "APIDS"
+    template_file = os.path.join("assets", "templates", f"certificate_{course_clean}_blank.pptx")
+    if not os.path.exists(template_file):
+        template_file = os.path.join("assets", "templates", "certificate_APIDS_blank.pptx")
+
+    verify_url = qr_utils.verification_url(
+        cert_no, base_url=st.session_state.get("verification_base_url", "http://localhost:8000")
+    )
+    qr_bytes = qr_utils.make_qr_image_bytes(verify_url)
+    qr_path = os.path.join(CERT_DIR, f"qr_{cert_no}.png")
+    with open(qr_path, "wb") as f:
+        f.write(qr_bytes)
+
+    pptx_certificate.render_certificate_pdf(
+        name=record.name,
+        certificate_number=cert_no,
+        completion_date=record.completion_date or datetime.now().strftime("%d-%b-%Y"),
+        qr_png_path=qr_path,
+        template_path=template_file,
+        output_pdf_path=vault_path,
+    )
+    from pdf_security import lock_and_protect_pdf
+    sha256_hash, _ = lock_and_protect_pdf(vault_path, allow_print=False, dpi=300)
+    if sha256_hash:
+        cert_store.store_pdf_security_hash(cert_no, sha256_hash)
+    try:
+        shutil.copyfile(vault_path, cert_path)
+    except Exception:
+        pass
+    return vault_path
 
 
 # ---------------------------------------------------------------------------
@@ -1361,8 +1418,129 @@ with tab4:
                 | filtered_df["Certificate Number"].str.lower().str.contains(q)
             ]
 
-        st.dataframe(filtered_df, use_container_width=True, height=300)
+    card_end()
+
+    # ------------------ Permanent Certificate Vault & Recovery ------------------
+    card_start("🗄️ Issued Certificate Vault & Lost Certificate Recovery", "Permanent archive of all issued certificates. Instantly search, download, or re-email a copy to any student who lost theirs.")
+
+    v_q = st.text_input("🔍 Search Vault by Student Name, Email ID, or Certificate Number", placeholder="e.g. Sk Abudl Sajid or 202505DVA2075 or student@example.com")
+
+    vault_records = cert_store.search_certificates(v_q)
+
+    if vault_records:
+        st.markdown(f"**Found {len(vault_records)} certificate(s) in permanent vault:**")
+
+        if v_q.strip():
+            for rec in vault_records[:5]:  # Show top 5 detailed cards
+                with st.container():
+                    st.markdown(
+                        f"""
+                        <div style="background:#ffffff; border:1.5px solid #e2e8f0; border-radius:14px; padding:16px 20px; margin-bottom:12px; box-shadow:0 4px 12px rgba(0,0,0,0.03);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                                <div style="font-weight:700; font-size:16px; color:#0f172a;">🎓 {rec.name}</div>
+                                <span class="dv-badge dv-badge-ok">🔒 {rec.cert_number}</span>
+                            </div>
+                            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:8px; font-size:13px; color:#475569; margin-bottom:12px;">
+                                <div><strong>Course:</strong> {rec.course}</div>
+                                <div><strong>Email:</strong> {rec.email}</div>
+                                <div><strong>Completion Date:</strong> {rec.completion_date or 'N/A'}</div>
+                                <div><strong>Status:</strong> {rec.status} ({rec.email_status})</div>
+                                <div><strong>Issued At:</strong> {rec.created_at[:10] if rec.created_at else 'N/A'}</div>
+                                <div><strong>SHA-256 Seal:</strong> <code>{rec.pdf_hash[:12] if rec.pdf_hash else 'Secured'}...</code></div>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                    # Action buttons for this specific student
+                    ac1, ac2, ac3 = st.columns([1.5, 1.5, 1])
+                    with ac1:
+                        pdf_path = ensure_cert_pdf_exists(rec)
+                        if os.path.exists(pdf_path):
+                            with open(pdf_path, "rb") as f:
+                                st.download_button(
+                                    f"⬇️ Download {rec.cert_number}.pdf",
+                                    data=f.read(),
+                                    file_name=f"{rec.cert_number}.pdf",
+                                    mime="application/pdf",
+                                    key=f"dl_vault_{rec.cert_number}",
+                                    use_container_width=True,
+                                )
+                    with ac2:
+                        if st.button(f"✉️ Re-email to {rec.name}", key=f"resend_{rec.cert_number}", use_container_width=True):
+                            if not smtp_cfg.is_configured():
+                                st.error("SMTP credentials not configured in Streamlit secrets.")
+                            else:
+                                try:
+                                    sender = EmailSender()
+                                    sender.connect()
+                                    pdf_path = ensure_cert_pdf_exists(rec)
+                                    p_subj = _apply_email_placeholders(
+                                        st.session_state.email_subject_tpl,
+                                        name=rec.name,
+                                        course=rec.course,
+                                        cert_no=rec.cert_number,
+                                        date=rec.completion_date or datetime.now().strftime("%d-%b-%Y"),
+                                    )
+                                    p_body = _apply_email_placeholders(
+                                        st.session_state.email_body_tpl,
+                                        name=rec.name,
+                                        course=rec.course,
+                                        cert_no=rec.cert_number,
+                                        date=rec.completion_date or datetime.now().strftime("%d-%b-%Y"),
+                                    )
+                                    sender.send(rec.email, p_subj, p_body, pdf_path)
+                                    sender.close()
+                                    cert_store.mark_sent(rec.cert_number)
+                                    st.success(f"✓ Successfully re-emailed certificate to {rec.email}!")
+                                except Exception as e:
+                                    st.error(f"Failed to re-send: {e}")
+                    with ac3:
+                        verify_link = qr_utils.verification_url(
+                            rec.cert_number,
+                            base_url=st.session_state.get("verification_base_url", "http://localhost:8000"),
+                        )
+                        st.link_button("👁️ Verify Online", verify_link, use_container_width=True)
+
+        st.markdown("##### 📜 Master Certificate Registry & Historical Ledger")
+        v_df = pd.DataFrame([
+            {
+                "Certificate Number": r.cert_number,
+                "Student Name": r.name,
+                "Email ID": r.email,
+                "Course": r.course,
+                "Completion Date": r.completion_date,
+                "Issued Date": r.created_at[:10] if r.created_at else "",
+                "Send Status": r.email_status,
+                "Security Seal": f"🔒 {r.pdf_hash[:10]}..." if r.pdf_hash else "🔒 AES-256",
+            }
+            for r in vault_records
+        ])
+        st.dataframe(v_df, use_container_width=True, height=260)
+
+        vb1, vb2 = st.columns(2)
+        with vb1:
+            vault_files = [ensure_cert_pdf_exists(r) for r in vault_records]
+            existing_vault_files = [p for p in vault_files if os.path.exists(p)]
+            if existing_vault_files:
+                v_zbuf = io.BytesIO()
+                with zipfile.ZipFile(v_zbuf, "w", zipfile.ZIP_DEFLATED) as vzf:
+                    for p in existing_vault_files:
+                        vzf.write(p, arcname=os.path.basename(p))
+                st.download_button(
+                    "📦 Download Entire Vault Archive (.zip)",
+                    data=v_zbuf.getvalue(),
+                    file_name="All_Issued_Certificates_Vault.zip",
+                    mime="application/zip",
+                    use_container_width=True,
+                )
+            else:
+                st.button("📦 Download Entire Vault Archive (.zip)", disabled=True, use_container_width=True)
+        with vb2:
+            v_csv = v_df.to_csv(index=False).encode("utf-8")
+            st.download_button("⬇️ Export Registry Ledger (CSV)", data=v_csv, file_name="Master_Certificate_Registry.csv", mime="text/csv", use_container_width=True)
     else:
-        st.info("No email sending activity logged in this session yet. Results will appear here once you dispatch emails in Tab ③.")
+        st.info("No certificates in permanent vault yet. Generated certificates will automatically be preserved here forever.")
 
     card_end()

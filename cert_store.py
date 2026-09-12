@@ -347,9 +347,29 @@ def clear_skip(row_number: int) -> None:
         conn.execute("DELETE FROM skipped_rows WHERE row_number = ?", (row_number,))
 
 
-def list_all_certificates() -> list:
+def list_all_certificates() -> list[CertificateRecord]:
     with _connect() as conn:
         rows = conn.execute("SELECT * FROM certificates ORDER BY created_at DESC").fetchall()
+        return [_row_to_record(r) for r in rows]
+
+
+def search_certificates(query: str = "") -> list[CertificateRecord]:
+    """Search certificates across name, email, cert_number, or course."""
+    if not query or not str(query).strip():
+        return list_all_certificates()
+    q = f"%{str(query).strip().lower()}%"
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM certificates
+             WHERE LOWER(name) LIKE ?
+                OR LOWER(email) LIKE ?
+                OR LOWER(cert_number) LIKE ?
+                OR LOWER(course) LIKE ?
+             ORDER BY created_at DESC
+            """,
+            (q, q, q, q),
+        ).fetchall()
         return [_row_to_record(r) for r in rows]
 
 
