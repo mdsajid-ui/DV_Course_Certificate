@@ -78,15 +78,40 @@ def init_db() -> None:
                 status TEXT NOT NULL DEFAULT 'VALID',   -- VALID / REVOKED
                 created_at TEXT NOT NULL,
                 last_sent_at TEXT,
-                send_count INTEGER NOT NULL DEFAULT 0
+                send_count INTEGER NOT NULL DEFAULT 0,
+                email_status TEXT NOT NULL DEFAULT 'PENDING',  -- PENDING / SENT / FAILED
+                last_error TEXT,
+                last_attempt_at TEXT
             );
             """
         )
+        # Additive migration for DBs created before email_status/last_error/last_attempt_at existed.
+        existing_cols = {row["name"] for row in conn.execute("PRAGMA table_info(certificates)").fetchall()}
+        if "email_status" not in existing_cols:
+            conn.execute("ALTER TABLE certificates ADD COLUMN email_status TEXT NOT NULL DEFAULT 'PENDING'")
+        if "last_error" not in existing_cols:
+            conn.execute("ALTER TABLE certificates ADD COLUMN last_error TEXT")
+        if "last_attempt_at" not in existing_cols:
+            conn.execute("ALTER TABLE certificates ADD COLUMN last_attempt_at TEXT")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS counters (
                 bucket TEXT PRIMARY KEY,   -- e.g. "DVA|APIDS|2026"
                 next_seq INTEGER NOT NULL
+            );
+            """
+        )
+        conn.execute(
+            """
+            -- Rows the automation loop could not even attempt to process (no email,
+            -- duplicate certificate number clash, etc). Keyed by sheet row number so
+            -- a later poll overwrites the same row's entry instead of piling up.
+            CREATE TABLE IF NOT EXISTS skipped_rows (
+                row_number INTEGER PRIMARY KEY,
+                name TEXT,
+                email TEXT,
+                reason TEXT NOT NULL,
+                detected_at TEXT NOT NULL
             );
             """
         )
@@ -113,6 +138,9 @@ class CertificateRecord:
     created_at: str
     last_sent_at: Optional[str]
     send_count: int
+    email_status: str = "PENDING"
+    last_error: Optional[str] = None
+    last_attempt_at: Optional[str] = None
 
 
 def _row_to_record(row: sqlite3.Row) -> CertificateRecord:
@@ -126,6 +154,9 @@ def _row_to_record(row: sqlite3.Row) -> CertificateRecord:
         created_at=row["created_at"],
         last_sent_at=row["last_sent_at"],
         send_count=row["send_count"],
+        email_status=row["email_status"],
+        last_error=row["last_error"],
+        last_attempt_at=row["last_attempt_at"],
     )
 
 
@@ -203,15 +234,65 @@ def issue_or_get_certificate_number(
 
 
 def mark_sent(cert_number: str) -> None:
+    now = datetime.now(timezone.utc).isoformat()
     with _lock, _connect() as conn:
         conn.execute(
             """
             UPDATE certificates
-               SET last_sent_at = ?, send_count = send_count + 1
+               SET last_sent_at = ?, send_count = send_count + 1,
+                   email_status = 'SENT', last_error = NULL, last_attempt_at = ?
              WHERE cert_number = ?
             """,
-            (datetime.now(timezone.utc).isoformat(), cert_number.strip()),
+            (now, now, cert_number.strip()),
         )
+
+
+def mark_send_failed(cert_number: str, error: str) -> None:
+    """Records a failed send attempt without touching send_count/last_sent_at,
+    so the dashboard can show 'FAILED' and the next automation poll will retry it."""
+    with _lock, _connect() as conn:
+        conn.execute(
+            """
+            UPDATE certificates
+               SET email_status = 'FAILED', last_error = ?, last_attempt_at = ?
+             WHERE cert_number = ?
+            """,
+            (str(error)[:500], datetime.now(timezone.utc).isoformat(), cert_number.strip()),
+        )
+
+
+def record_skip(row_number: int, name: str, email: str, reason: str) -> None:
+    """Logs a sheet row the automation loop couldn't even attempt (no email,
+    duplicate cert-number clash, etc). Overwrites any prior entry for that row."""
+    with _lock, _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO skipped_rows (row_number, name, email, reason, detected_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(row_number) DO UPDATE SET
+                name=excluded.name, email=excluded.email,
+                reason=excluded.reason, detected_at=excluded.detected_at
+            """,
+            (row_number, name, email, reason, datetime.now(timezone.utc).isoformat()),
+        )
+
+
+def clear_skip(row_number: int) -> None:
+    """Called once a previously-skipped row is processed successfully."""
+    with _lock, _connect() as conn:
+        conn.execute("DELETE FROM skipped_rows WHERE row_number = ?", (row_number,))
+
+
+def list_all_certificates() -> list:
+    with _connect() as conn:
+        rows = conn.execute("SELECT * FROM certificates ORDER BY created_at DESC").fetchall()
+        return [_row_to_record(r) for r in rows]
+
+
+def list_skipped_rows() -> list:
+    with _connect() as conn:
+        rows = conn.execute("SELECT * FROM skipped_rows ORDER BY row_number ASC").fetchall()
+        return [dict(r) for r in rows]
 
 
 init_db()
