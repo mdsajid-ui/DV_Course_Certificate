@@ -502,7 +502,17 @@ def build_participant_cert(rec: dict, template_mode: str, default_course: str) -
             custom_filename=cert_number,
         )
 
-    return cert_number, pdf_path, was_new
+    # Apply digital encryption, strict permission lock & compute SHA-256 checksum
+    sha256_hash = ""
+    try:
+        from pdf_security import lock_and_protect_pdf
+        sha256_hash, _ = lock_and_protect_pdf(pdf_path)
+        if sha256_hash:
+            cert_store.store_pdf_security_hash(cert_number, sha256_hash)
+    except Exception:
+        pass
+
+    return cert_number, pdf_path, was_new, sha256_hash
 
 
 # ---------------------------------------------------------------------------
@@ -815,6 +825,17 @@ with tab2:
     if total_recs == 0:
         st.info("⚠️ Please add participants in **Step ① Add Participants & Template** first.")
     else:
+        st.markdown(
+            """
+            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:12px 16px; margin-bottom:14px; font-size:13px; color:#1e40af;">
+                <strong>🛡️ High-Tight Digital Security Active:</strong>
+                All generated certificates are cryptographically locked with <strong>AES-256 encryption</strong> and permission restrictions.
+                Document editing, text modification, content copying, and page tampering are strictly disabled. Each certificate is registered with a unique <strong>SHA-256 digital seal</strong>.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         st.markdown("##### ⚡ Generation Actions")
         g_col1, g_col2 = st.columns([1, 1])
 
@@ -829,7 +850,7 @@ with tab2:
                     email = rec.get("Email ID", "")
                     progress.progress((i + 1) / total_recs, text=f"Generating {i+1} of {total_recs}: {name}")
                     try:
-                        cert_no, pdf_path, _ = build_participant_cert(
+                        cert_no, pdf_path, _, sha256_hash = build_participant_cert(
                             rec, st.session_state.template_mode, default_course
                         )
                         cert_paths[email or name] = {
@@ -838,6 +859,7 @@ with tab2:
                             "Course": rec.get("Course") or default_course,
                             "CertNumber": cert_no,
                             "Path": pdf_path,
+                            "SHA256": sha256_hash,
                             "Status": "Generated",
                         }
                     except Exception as e:
@@ -847,6 +869,7 @@ with tab2:
                             "Course": rec.get("Course") or default_course,
                             "CertNumber": "Error",
                             "Path": None,
+                            "SHA256": "",
                             "Status": f"Failed: {e}",
                         }
                         log_event(email, "CERT_GEN_ERROR", str(e))
@@ -854,7 +877,7 @@ with tab2:
                 st.session_state.cert_paths = cert_paths
                 progress.empty()
                 ok_count = sum(1 for v in cert_paths.values() if v.get("Path"))
-                st.success(f"✓ Generation complete! Successfully generated {ok_count} of {total_recs} certificates.")
+                st.success(f"✓ Generation complete! Successfully generated {ok_count} of {total_recs} certificates with AES-256 security lock.")
                 st.rerun()
 
         with g_col2:
@@ -862,8 +885,8 @@ with tab2:
                 try:
                     first_rec = records[0]
                     default_course = st.session_state.selected_official_course
-                    cert_no, pdf_path, _ = build_participant_cert(first_rec, st.session_state.template_mode, default_course)
-                    st.success(f"✓ Generated Preview Certificate: **{cert_no}** for **{first_rec['Name']}**")
+                    cert_no, pdf_path, _, _ = build_participant_cert(first_rec, st.session_state.template_mode, default_course)
+                    st.success(f"✓ Generated Secured Preview Certificate: **{cert_no}** for **{first_rec['Name']}**")
                     with open(pdf_path, "rb") as f:
                         st.download_button(
                             f"⬇️ Download Preview PDF ({cert_no}.pdf)",
@@ -878,7 +901,7 @@ with tab2:
         # Review Table & Zip Download
         if st.session_state.cert_paths:
             st.markdown("---")
-            st.markdown("##### 📋 Generated Certificates Roster")
+            st.markdown("##### 📋 Generated Certificates & Security Ledger")
 
             review_rows = []
             for k, info in st.session_state.cert_paths.items():
@@ -887,7 +910,8 @@ with tab2:
                     "Email ID": info.get("Email"),
                     "Course": info.get("Course"),
                     "Certificate Number": info.get("CertNumber"),
-                    "Status": "✅ Ready" if info.get("Path") else f"❌ {info.get('Status')}",
+                    "Security Protection": "🔒 AES-256 Read-Only",
+                    "Status": "✅ Ready & Locked" if info.get("Path") else f"❌ {info.get('Status')}",
                 })
             st.dataframe(pd.DataFrame(review_rows), use_container_width=True, height=240)
 

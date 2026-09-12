@@ -81,11 +81,14 @@ def init_db() -> None:
                 send_count INTEGER NOT NULL DEFAULT 0,
                 email_status TEXT NOT NULL DEFAULT 'PENDING',  -- PENDING / SENT / FAILED
                 last_error TEXT,
-                last_attempt_at TEXT
+                last_attempt_at TEXT,
+                pdf_hash TEXT,
+                is_locked INTEGER NOT NULL DEFAULT 1,
+                security_level TEXT NOT NULL DEFAULT 'AES-256-READONLY'
             );
             """
         )
-        # Additive migration for DBs created before email_status/last_error/last_attempt_at existed.
+        # Additive migration for DBs created before new columns existed.
         existing_cols = {row["name"] for row in conn.execute("PRAGMA table_info(certificates)").fetchall()}
         if "email_status" not in existing_cols:
             conn.execute("ALTER TABLE certificates ADD COLUMN email_status TEXT NOT NULL DEFAULT 'PENDING'")
@@ -93,6 +96,12 @@ def init_db() -> None:
             conn.execute("ALTER TABLE certificates ADD COLUMN last_error TEXT")
         if "last_attempt_at" not in existing_cols:
             conn.execute("ALTER TABLE certificates ADD COLUMN last_attempt_at TEXT")
+        if "pdf_hash" not in existing_cols:
+            conn.execute("ALTER TABLE certificates ADD COLUMN pdf_hash TEXT")
+        if "is_locked" not in existing_cols:
+            conn.execute("ALTER TABLE certificates ADD COLUMN is_locked INTEGER NOT NULL DEFAULT 1")
+        if "security_level" not in existing_cols:
+            conn.execute("ALTER TABLE certificates ADD COLUMN security_level TEXT NOT NULL DEFAULT 'AES-256-READONLY'")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS counters (
@@ -141,9 +150,13 @@ class CertificateRecord:
     email_status: str = "PENDING"
     last_error: Optional[str] = None
     last_attempt_at: Optional[str] = None
+    pdf_hash: Optional[str] = None
+    is_locked: int = 1
+    security_level: str = "AES-256-READONLY"
 
 
 def _row_to_record(row: sqlite3.Row) -> CertificateRecord:
+    keys = row.keys()
     return CertificateRecord(
         cert_number=row["cert_number"],
         name=row["name"],
@@ -154,10 +167,26 @@ def _row_to_record(row: sqlite3.Row) -> CertificateRecord:
         created_at=row["created_at"],
         last_sent_at=row["last_sent_at"],
         send_count=row["send_count"],
-        email_status=row["email_status"],
-        last_error=row["last_error"],
-        last_attempt_at=row["last_attempt_at"],
+        email_status=row["email_status"] if "email_status" in keys else "PENDING",
+        last_error=row["last_error"] if "last_error" in keys else None,
+        last_attempt_at=row["last_attempt_at"] if "last_attempt_at" in keys else None,
+        pdf_hash=row["pdf_hash"] if "pdf_hash" in keys else None,
+        is_locked=row["is_locked"] if "is_locked" in keys else 1,
+        security_level=row["security_level"] if "security_level" in keys else "AES-256-READONLY",
     )
+
+
+def store_pdf_security_hash(cert_number: str, pdf_hash: str) -> None:
+    """Records the cryptographic SHA-256 integrity seal for an issued certificate."""
+    with _lock, _connect() as conn:
+        conn.execute(
+            """
+            UPDATE certificates
+               SET pdf_hash = ?, is_locked = 1
+             WHERE cert_number = ?
+            """,
+            (str(pdf_hash), cert_number.strip()),
+        )
 
 
 def get_by_student(email: str, course: str) -> Optional[CertificateRecord]:

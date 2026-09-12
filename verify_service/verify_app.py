@@ -39,22 +39,36 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Certificate Verification</title>
+<title>Official Certificate Verification · DV Analytics</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  body {{ font-family: -apple-system, Segoe UI, Roboto, sans-serif; background:#f4f6fb;
-         display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; }}
-  .card {{ background:#fff; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,0.08);
-           padding:2.5rem; max-width:420px; width:90%; text-align:center; }}
-  .badge {{ font-size:1.1rem; font-weight:700; border-radius:8px; padding:0.6rem 1rem; display:inline-block; margin-bottom:1.2rem; }}
-  .valid {{ background:#e6f7ec; color:#1a7f3c; }}
-  .invalid {{ background:#fdeaea; color:#b3261e; }}
-  dl {{ text-align:left; margin:0; }}
-  dt {{ font-size:0.8rem; color:#666; margin-top:0.8rem; text-transform:uppercase; letter-spacing:0.03em; }}
-  dd {{ font-size:1.05rem; margin:0.15rem 0 0 0; font-weight:600; color:#222; }}
+  * { box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b112c;
+         background: radial-gradient(circle at 50% 0%, #172a6b 0%, #080d24 100%);
+         display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; padding:20px; color:#1e293b; }
+  .card { background:#ffffff; border-radius:20px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.45);
+           padding:2.8rem 2.2rem; max-width:480px; width:100%; text-align:center; position:relative; overflow:hidden; border: 1px solid rgba(255,255,255,0.1); }
+  .card:before { content:""; position:absolute; top:0; left:0; right:0; height:6px; background:linear-gradient(90deg, #5b6cf7, #ef233c); }
+  .logo { font-family:'Poppins', sans-serif; font-weight:800; font-size:1.4rem; color:#0b1b4d; letter-spacing:-0.5px; margin-bottom:1.2rem; display:flex; align-items:center; justify-content:center; gap:8px; }
+  .logo-badge { background:#ef233c; color:#fff; padding:2px 8px; border-radius:6px; font-size:0.9rem; }
+  .badge { font-size:0.95rem; font-weight:700; border-radius:30px; padding:0.6rem 1.4rem; display:inline-flex; align-items:center; gap:6px; margin-bottom:1.5rem; letter-spacing:0.3px; }
+  .valid { background:#e6f7ec; color:#128a44; border:1px solid #b7ebd0; }
+  .invalid { background:#fdeaea; color:#b3261e; border:1px solid #f9c6c4; }
+  dl { text-align:left; margin:0 0 1.5rem; background:#f8fafc; border-radius:14px; padding:1.2rem 1.4rem; border:1px solid #e2e8f0; }
+  dt { font-size:0.75rem; color:#64748b; margin-top:0.75rem; text-transform:uppercase; letter-spacing:0.06em; font-weight:600; }
+  dt:first-child { margin-top:0; }
+  dd { font-size:1.05rem; margin:0.2rem 0 0 0; font-weight:700; color:#0f172a; word-break:break-word; }
+  .security-seal { background:#eff6ff; border:1px dashed #3b82f6; border-radius:10px; padding:10px 14px; font-size:0.78rem; color:#1e40af; text-align:left; margin-bottom:1.2rem; }
+  .security-seal strong { display:block; margin-bottom:3px; color:#1d4ed8; }
+  .hash-box { font-family:monospace; font-size:0.72rem; color:#475569; word-break:break-all; background:#fff; padding:4px 8px; border-radius:4px; border:1px solid #cbd5e1; margin-top:4px; }
+  .notice { font-size:0.75rem; color:#94a3b8; line-height:1.4; margin:0; }
 </style>
 </head>
 <body>
   <div class="card">
+    <div class="logo">
+      <span class="logo-badge">DV</span> ANALYTICS
+    </div>
     {body}
   </div>
 </body>
@@ -65,25 +79,36 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 def verify(certificate_number: str):
     record = cert_store.get_by_cert_number(certificate_number)
     if record is None or record.status != "VALID":
-        body = (
-            '<div class="badge invalid">&#10007; CERTIFICATE NOT FOUND</div>'
-            "<p>This certificate number could not be verified. If you believe this is "
-            "an error, please contact DV Analytics.</p>"
-        )
+        body = """
+          <div class="badge invalid">✕ INVALID / UNVERIFIED CERTIFICATE</div>
+          <p style="color:#64748b; font-size:0.92rem; line-height:1.5;">This certificate number could not be authenticated in the DV Analytics official registry. If you believe this is an error, please contact DV Analytics administration.</p>
+        """
         html_out = PAGE_TEMPLATE.format(body=body)
         return html_out, 404
 
     safe_name = html.escape(record.name)
     safe_course = html.escape(record.course)
     safe_number = html.escape(record.cert_number)
+    safe_date = html.escape(record.completion_date or "Verified")
+    pdf_hash = getattr(record, "pdf_hash", None) or ""
+
+    hash_html = f'<div class="hash-box">SHA-256: {html.escape(pdf_hash[:40])}...</div>' if pdf_hash else ""
+
     body = f"""
-      <div class="badge valid">&#10003; CERTIFICATE VERIFIED</div>
+      <div class="badge valid">✓ CERTIFICATE AUTHENTICATED</div>
       <dl>
-        <dt>Name</dt><dd>{safe_name}</dd>
-        <dt>Course</dt><dd>{safe_course}</dd>
+        <dt>Candidate Name</dt><dd>{safe_name}</dd>
+        <dt>Course / Program</dt><dd>{safe_course}</dd>
         <dt>Certificate Number</dt><dd>{safe_number}</dd>
-        <dt>Status</dt><dd>VALID</dd>
+        <dt>Date of Completion</dt><dd>{safe_date}</dd>
+        <dt>Status</dt><dd style="color:#128a44;">VALID &amp; REGISTERED</dd>
       </dl>
+      <div class="security-seal">
+        <strong>🔒 Cryptographically Protected &amp; Immutable</strong>
+        This document is permanently registered with DV Analytics. Any physical or digital alterations made to offline copies are void.
+        {hash_html}
+      </div>
+      <p class="notice">DV Analytics Verification Authority · All Rights Reserved</p>
     """
     return PAGE_TEMPLATE.format(body=body)
 

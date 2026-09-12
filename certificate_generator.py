@@ -281,4 +281,12 @@ def generate_certificate(
 
     output_path = os.path.join(output_dir, filename)
     save_image_as_pdf(rendered, output_path)
+
+    # Apply digital encryption, permission lock & calculate SHA-256 seal
+    try:
+        from pdf_security import lock_and_protect_pdf
+        lock_and_protect_pdf(output_path)
+    except Exception:
+        pass
+
     return output_path

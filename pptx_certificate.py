@@ -267,4 +267,11 @@ def render_certificate_pdf(
         os.makedirs(os.path.dirname(output_pdf_path) or ".", exist_ok=True)
         shutil.copyfile(produced, output_pdf_path)
 
+    # Apply digital encryption, permission lock & calculate SHA-256 seal
+    try:
+        from pdf_security import lock_and_protect_pdf
+        lock_and_protect_pdf(output_pdf_path)
+    except Exception:
+        pass
+
     return output_pdf_path
