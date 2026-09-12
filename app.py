@@ -594,6 +594,42 @@ with st.sidebar:
     st.caption("DV Analytics · Course Completion Certificate")
 
 
+OFFICIAL_EMAIL_TEMPLATES = {
+    "APIDS": {
+        "course_name": "Data Science (APIDS)",
+        "subject": "Congratulations! Your Data Science Certification from DV Analytics 🎓",
+        "body": (
+            "Dear {{Name}},\n\n"
+            "Congratulations on successfully completing the 6-Month Advanced Program in Industrial Data Science (APIDS) at DV Analytics!\n\n"
+            "Over the course of this program, you've built strong expertise in DBMS Programming, Data Analysis & Visualization, and Data Mining — covering Predictive Modeling, Machine Learning, Deep Learning, and Generative AI. You've also gained hands-on experience with Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, and Azure MLOps, applying these skills to real-world projects across Banking, Telecom, Retail, eCommerce, and Healthcare.\n\n"
+            "Please find your Certificate of Completion attached.\n\n"
+            "Certificate Registration Number: {{CertNo}}\n"
+            "Date of Completion: {{Date}}\n\n"
+            "We're proud of the dedication and effort you've shown throughout the program, and we're confident these skills will serve you well as you move forward in your data science career.\n\n"
+            "Wishing you continued success!\n\n"
+            "Warm regards,\n"
+            "DV Analytics"
+        ),
+    },
+    "APDA": {
+        "course_name": "Data Analytics (APDA)",
+        "subject": "Congratulations! Your Data Analytics Certification from DV Analytics 🎓",
+        "body": (
+            "Dear {{Name}},\n\n"
+            "Congratulations on successfully completing the 6-Month Advanced Program in Data Analytics (APDA) at DV Analytics!\n\n"
+            "Throughout the program, you've developed a solid foundation in DBMS Programming, Data Analysis & Visualization, and Data Mining, with hands-on training in Excel, SQL, Python, SAS, Tableau, and Power BI — applied to real-world projects spanning Banking, Telecom, Retail, eCommerce, and Healthcare.\n\n"
+            "Please find your Certificate of Completion attached.\n\n"
+            "Certificate Registration Number: {{CertNo}}\n"
+            "Date of Completion: {{Date}}\n\n"
+            "We appreciate the hard work and commitment you've shown throughout this journey, and we're confident this program has equipped you with valuable, industry-relevant analytics skills.\n\n"
+            "Wishing you all the best in your future endeavors!\n\n"
+            "Warm regards,\n"
+            "DV Analytics"
+        ),
+    },
+}
+
+
 # ---------------------------------------------------------------------------
 # Helper Functions
 # ---------------------------------------------------------------------------
@@ -605,6 +641,37 @@ def _apply_email_placeholders(tpl: str, *, name: str, course: str, cert_no: str,
     res = re.sub(r"\{\{\s*(?:date|issue_date|completion_date)\s*\}\}", date, res, flags=re.IGNORECASE)
     res = re.sub(r"\{\{\s*(?:mobile|phone|mobile_number)\s*\}\}", mobile, res, flags=re.IGNORECASE)
     return res
+
+
+def get_course_email_content(
+    course: str,
+    *,
+    name: str,
+    cert_no: str,
+    date: str,
+    mobile: str = "",
+    custom_subject: Optional[str] = None,
+    custom_body: Optional[str] = None,
+    use_custom: bool = False,
+) -> tuple[str, str]:
+    """
+    Automatically selects and personalizes the exact official email template
+    based on whether the student is enrolled in APIDS or APDA.
+    """
+    if use_custom and custom_subject and custom_body:
+        subj = _apply_email_placeholders(custom_subject, name=name, course=course, cert_no=cert_no, date=date, mobile=mobile)
+        body = _apply_email_placeholders(custom_body, name=name, course=course, cert_no=cert_no, date=date, mobile=mobile)
+        return subj, body
+
+    c_upper = (course or "APIDS").upper()
+    if "APDA" in c_upper or "ANALYTICS" in c_upper:
+        tpl = OFFICIAL_EMAIL_TEMPLATES["APDA"]
+    else:
+        tpl = OFFICIAL_EMAIL_TEMPLATES["APIDS"]
+
+    subj = _apply_email_placeholders(tpl["subject"], name=name, course=course, cert_no=cert_no, date=date, mobile=mobile)
+    body = _apply_email_placeholders(tpl["body"], name=name, course=course, cert_no=cert_no, date=date, mobile=mobile)
+    return subj, body
 
 
 def build_participant_cert(rec: dict, template_mode: str, default_course: str) -> tuple[str, str, bool]:
@@ -1245,35 +1312,74 @@ with tab3:
                     st.error(f"Test email failed: {e}")
     card_end()
 
-    card_start("2. Dynamic Email Composer", "Compose your subject and message. Dynamic tags are personalized per participant.")
+    card_start("2. Course-Adaptive Email Templates (Auto-Configured & Ready)", "Official DV Analytics email templates with automatic course detection and personalized student details.")
 
-    col_em1, col_em2 = st.columns(2)
-    with col_em1:
-        email_subj = st.text_input("Email Subject", key="email_subject_tpl")
-    with col_em2:
+    em_mode = st.radio(
+        "Email Content Mode",
+        ["⚡ Automatic Course-Adaptive (Official APIDS & APDA Content)", "✏️ Custom Template Editor"],
+        horizontal=True,
+    )
+    st.session_state.email_composer_mode = em_mode
+
+    if em_mode == "⚡ Automatic Course-Adaptive (Official APIDS & APDA Content)":
         st.markdown(
-            "**Available Tags:** &nbsp; `{{Name}}` &nbsp; `{{Course}}` &nbsp; `{{CertNo}}` &nbsp; `{{Date}}` &nbsp; `{{Mobile}}`",
+            """
+            <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:12px; padding:14px 18px; margin-bottom:16px; font-size:13px; color:#166534;">
+                <div style="font-weight:700; font-size:14px; margin-bottom:4px;">✅ 100% Fully Automated Email Content:</div>
+                When sending certificates, the system <strong>automatically selects the exact matching official email</strong> for each student based on their enrolled course:
+                <ul style="margin:6px 0 0 16px; padding:0; line-height:1.6;">
+                    <li><strong>APIDS (Data Science):</strong> Automatically receives <em>Email 1 — Data Science (APIDS) Certificate</em> with full curriculum summary (Predictive Modeling, ML, Deep Learning, Gen AI, Azure MLOps, SQL, Python, etc.).</li>
+                    <li><strong>APDA (Data Analytics):</strong> Automatically receives <em>Email 2 — Data Analytics (APDA) Certificate</em> with full analytics summary (SQL, Python, SAS, Tableau, Power BI, DBMS, etc.).</li>
+                    <li><strong>Auto-Filled Data:</strong> Student Name (<code>{{Name}}</code>), Certificate Number (<code>{{CertNo}}</code>), and Completion Date (<code>{{Date}}</code>) are inserted automatically into each email. Zero manual typing required!</li>
+                </ul>
+            </div>
+            """,
             unsafe_allow_html=True,
         )
 
-    email_body = st.text_area("Email Body", height=180, key="email_body_tpl")
+        tpl_tab1, tpl_tab2 = st.tabs(["🎓 Email 1 — Data Science (APIDS)", "📊 Email 2 — Data Analytics (APDA)"])
+        with tpl_tab1:
+            st.markdown(f"**Subject:** `{OFFICIAL_EMAIL_TEMPLATES['APIDS']['subject']}`")
+            st.text_area("APIDS Official Message Template", value=OFFICIAL_EMAIL_TEMPLATES["APIDS"]["body"], height=200, disabled=True)
+        with tpl_tab2:
+            st.markdown(f"**Subject:** `{OFFICIAL_EMAIL_TEMPLATES['APDA']['subject']}`")
+            st.text_area("APDA Official Message Template", value=OFFICIAL_EMAIL_TEMPLATES["APDA"]["body"], height=200, disabled=True)
+
+    else:
+        col_em1, col_em2 = st.columns(2)
+        with col_em1:
+            email_subj = st.text_input("Custom Email Subject", key="email_subject_tpl")
+        with col_em2:
+            st.markdown(
+                "**Available Tags:** &nbsp; `{{Name}}` &nbsp; `{{Course}}` &nbsp; `{{CertNo}}` &nbsp; `{{Date}}` &nbsp; `{{Mobile}}`",
+                unsafe_allow_html=True,
+            )
+        email_body = st.text_area("Custom Email Body", height=180, key="email_body_tpl")
 
     # Live Preview of first recipient
     if st.session_state.records:
-        with st.expander("👁️ Live Preview for First Recipient"):
+        with st.expander("👁️ Live Preview for First Recipient", expanded=True):
             sample_rec = st.session_state.records[0]
             sample_name = sample_rec["Name"]
             sample_course = sample_rec.get("Course") or st.session_state.selected_official_course
-            sample_cert = sample_rec.get("Certificate Number") or "DVA-APIDS-2026-000001"
+            sample_cert = sample_rec.get("Certificate Number") or f"{st.session_state.get('cert_batch_prefix', '202505')}{st.session_state.get('institute_code', 'DVA')}{st.session_state.get('cert_start_seq', 2075)}"
             sample_date = sample_rec.get("Completion Date") or datetime.now().strftime("%d-%b-%Y")
             sample_mob = sample_rec.get("Mobile Number", "")
 
-            prev_subj = _apply_email_placeholders(email_subj, name=sample_name, course=sample_course, cert_no=sample_cert, date=sample_date, mobile=sample_mob)
-            prev_body = _apply_email_placeholders(email_body, name=sample_name, course=sample_course, cert_no=sample_cert, date=sample_date, mobile=sample_mob)
+            prev_subj, prev_body = get_course_email_content(
+                sample_course,
+                name=sample_name,
+                cert_no=sample_cert,
+                date=sample_date,
+                mobile=sample_mob,
+                custom_subject=st.session_state.get("email_subject_tpl"),
+                custom_body=st.session_state.get("email_body_tpl"),
+                use_custom=(em_mode != "⚡ Automatic Course-Adaptive (Official APIDS & APDA Content)"),
+            )
 
-            st.markdown(f"**To:** `{sample_rec.get('Email ID', 'student@example.com')}`")
+            st.markdown(f"**Recipient:** `{sample_rec.get('Email ID', 'student@example.com')}` &nbsp;·&nbsp; **Course Detected:** `{sample_course}`")
             st.markdown(f"**Subject:** {prev_subj}")
-            st.text_area("Rendered Message", value=prev_body, height=130, disabled=True)
+            st.text_area("Rendered Personalized Email", value=prev_body, height=180, disabled=True)
 
     card_end()
 
@@ -1356,9 +1462,17 @@ with tab3:
                 results.append(row_res)
                 continue
 
-            # Personalize subject & body
-            p_subj = _apply_email_placeholders(email_subj, name=name, course=course, cert_no=cert_no, date=date_val, mobile=mobile)
-            p_body = _apply_email_placeholders(email_body, name=name, course=course, cert_no=cert_no, date=date_val, mobile=mobile)
+            # Automatically select and personalize official course email
+            p_subj, p_body = get_course_email_content(
+                course,
+                name=name,
+                cert_no=cert_no,
+                date=date_val,
+                mobile=mobile,
+                custom_subject=st.session_state.get("email_subject_tpl"),
+                custom_body=st.session_state.get("email_body_tpl"),
+                use_custom=(st.session_state.get("email_composer_mode") == "✏️ Custom Template Editor"),
+            )
 
             try:
                 sender.send(email, p_subj, p_body, cert_path)
@@ -1536,17 +1650,9 @@ with tab4:
                                     sender = EmailSender()
                                     sender.connect()
                                     pdf_path = ensure_cert_pdf_exists(rec)
-                                    p_subj = _apply_email_placeholders(
-                                        st.session_state.email_subject_tpl,
+                                    p_subj, p_body = get_course_email_content(
+                                        rec.course,
                                         name=rec.name,
-                                        course=rec.course,
-                                        cert_no=rec.cert_number,
-                                        date=rec.completion_date or datetime.now().strftime("%d-%b-%Y"),
-                                    )
-                                    p_body = _apply_email_placeholders(
-                                        st.session_state.email_body_tpl,
-                                        name=rec.name,
-                                        course=rec.course,
                                         cert_no=rec.cert_number,
                                         date=rec.completion_date or datetime.now().strftime("%d-%b-%Y"),
                                     )
