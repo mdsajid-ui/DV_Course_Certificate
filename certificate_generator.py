@@ -217,14 +217,14 @@ def render_certificate_image(
 
     draw.text((x, y), text, font=font, fill=text_color)
 
-    # Optional QR code overlay (bottom right)
+    # Optional QR code overlay (top right under NASSCOM header per official design)
     if qr_png_path and os.path.exists(qr_png_path):
         try:
             qr_img = Image.open(qr_png_path).convert("RGBA")
-            qr_size = int(min(img.width, img.height) * 0.12)
+            qr_size = int(img.width * 0.115)
             qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.LANCZOS)
-            qr_x = int(img.width * 0.82) - (qr_size // 2)
-            qr_y = int(img.height * 0.72)
+            qr_x = int(img.width * 0.805)
+            qr_y = int(img.height * 0.184)
             img.paste(qr_img, (qr_x, qr_y), qr_img if qr_img.mode == "RGBA" else None)
         except Exception:
             pass

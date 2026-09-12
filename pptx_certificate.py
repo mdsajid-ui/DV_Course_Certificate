@@ -71,11 +71,11 @@ DEFAULT_TEMPLATE_PATH = os.environ.get(
 # with margin to spare before the signature block starts around y=6.6in.
 # Overridable via env vars so a redesigned template doesn't require a code
 # change.
-QR_LEFT_IN = float(os.environ.get("CERTIFICATE_QR_LEFT_IN", 6.85))
-QR_TOP_IN = float(os.environ.get("CERTIFICATE_QR_TOP_IN", 5.02))
-QR_SIZE_IN = float(os.environ.get("CERTIFICATE_QR_SIZE_IN", 0.68))
-QR_CAPTION_GAP_IN = 0.02
-QR_CAPTION_HEIGHT_IN = 0.15
+# Top-right placement under the NASSCOM logo (per official design reference)
+# Overridable via env vars if template changes.
+QR_LEFT_IN = float(os.environ.get("CERTIFICATE_QR_LEFT_IN", 8.05))
+QR_TOP_IN = float(os.environ.get("CERTIFICATE_QR_TOP_IN", 1.38))
+QR_SIZE_IN = float(os.environ.get("CERTIFICATE_QR_SIZE_IN", 1.15))
 
 
 class TemplateFieldNotFound(RuntimeError):
@@ -191,31 +191,6 @@ def _add_qr_to_slide(prs: Presentation, qr_png_path: str, certificate_number: st
         width=Inches(QR_SIZE_IN),
         height=Inches(QR_SIZE_IN),
     )
-    # Single short line only (no certificate number repeated here — it's
-    # already printed in the certificate body above). Kept deliberately
-    # small: the gap between the "Certificate Registration Number" line and
-    # the right-hand signature scrawl is under 1 inch on the real template,
-    # so every fraction of an inch here risks the caption overlapping the
-    # signature again (see README "QR placement" notes).
-    caption_top = QR_TOP_IN + QR_SIZE_IN + QR_CAPTION_GAP_IN
-    box = slide.shapes.add_textbox(
-        Inches(QR_LEFT_IN - 0.25),
-        Inches(caption_top),
-        Inches(QR_SIZE_IN + 0.5),
-        Inches(QR_CAPTION_HEIGHT_IN),
-    )
-    from pptx.util import Pt
-    from pptx.enum.text import PP_ALIGN
-
-    tf = box.text_frame
-    tf.word_wrap = True
-    tf.margin_top = 0
-    tf.margin_bottom = 0
-    p1 = tf.paragraphs[0]
-    p1.text = "Scan to Verify"
-    p1.alignment = PP_ALIGN.CENTER
-    p1.runs[0].font.size = Pt(6)
-    p1.runs[0].font.bold = True
 
 
 def render_certificate_pdf(
