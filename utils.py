@@ -61,9 +61,12 @@ def log_event(recipient: str, status: str, error: str = ""):
 # Real-world files use all sorts of headers (STU_NAME, MOBILE-1, EMAIL ID, etc.)
 # so we match by keyword/substring rather than requiring an exact name.
 COLUMN_KEYWORDS = {
-    "Name": ["name"],
-    "Mobile Number": ["mobile", "phone", "contact", "whatsapp", "cell"],
+    "Name": ["name", "student", "participant", "candidate"],
+    "Mobile Number": ["mobile", "phone", "contact", "whatsapp", "cell", "tel"],
     "Email ID": ["email", "e-mail", "mail"],
+    "Course": ["course", "program", "programme", "course name"],
+    "Completion Date": ["completion date", "date of completion", "date", "completed on"],
+    "Certificate Number": ["certificate number", "certificate no", "cert number", "cert no"],
 }
 
 
@@ -74,13 +77,13 @@ def _normalize(s: str) -> str:
 
 def find_matching_column(columns, required: str):
     """
-    Find the column that best matches a required field by keyword.
+    Find the column that best matches a field by keyword.
     Tries, in order: exact normalized match, then substring/keyword match.
     """
     keywords = COLUMN_KEYWORDS.get(required, [required.lower()])
     norm_cols = {col: _normalize(col) for col in columns}
 
-    # 1) Exact normalized match against the required field name itself
+    # 1) Exact normalized match against the field name itself
     req_norm = _normalize(required)
     for col, norm in norm_cols.items():
         if norm == req_norm:
@@ -96,18 +99,26 @@ def find_matching_column(columns, required: str):
 
 def validate_excel_columns(df: pd.DataFrame):
     """
-    Confirms Name, Mobile Number, and Email ID columns exist (flexibly matched
-    by keyword, so headers like STU_NAME / MOBILE-1 / EMAIL ID are recognized).
+    Confirms Name and Email ID columns exist (flexibly matched
+    by keyword). Mobile Number is matched if present, or optional.
     Returns (is_valid, column_map, missing_columns).
     """
     column_map = {}
     missing = []
-    for required in REQUIRED_COLUMNS:
+    # Primary required fields
+    for required in ["Name", "Email ID"]:
         match = find_matching_column(df.columns, required)
         if match:
             column_map[required] = match
         else:
             missing.append(required)
+
+    # Optional fields (Mobile Number, Course, Completion Date, Certificate Number)
+    for opt in ["Mobile Number", "Course", "Completion Date", "Certificate Number"]:
+        match = find_matching_column(df.columns, opt)
+        if match:
+            column_map[opt] = match
+
     return (len(missing) == 0), column_map, missing
 
 
@@ -115,27 +126,61 @@ def normalize_records(df: pd.DataFrame, column_map: dict):
     """Return a list of dicts with clean, standardized keys."""
     records = []
     for _, row in df.iterrows():
-        name = str(row[column_map["Name"]]).strip()
-        mobile = str(row[column_map["Mobile Number"]]).strip()
-        email = str(row[column_map["Email ID"]]).strip()
-        if mobile.lower() == "nan":
+        name_col = column_map.get("Name")
+        email_col = column_map.get("Email ID")
+        mobile_col = column_map.get("Mobile Number")
+        course_col = column_map.get("Course")
+        date_col = column_map.get("Completion Date")
+        cert_col = column_map.get("Certificate Number")
+
+        name = str(row[name_col]).strip() if name_col and name_col in row else ""
+        email = str(row[email_col]).strip() if email_col and email_col in row else ""
+        mobile = str(row[mobile_col]).strip() if mobile_col and mobile_col in row else ""
+        course = str(row[course_col]).strip() if course_col and course_col in row else ""
+        comp_date = str(row[date_col]).strip() if date_col and date_col in row else ""
+        cert_no = str(row[cert_col]).strip() if cert_col and cert_col in row else ""
+
+        if mobile.lower() in ("nan", "none"):
             mobile = ""
-        if name.lower() == "nan" or not name:
+        if course.lower() in ("nan", "none"):
+            course = ""
+        if comp_date.lower() in ("nan", "none"):
+            comp_date = ""
+        if cert_no.lower() in ("nan", "none"):
+            cert_no = ""
+        if name.lower() in ("nan", "none") or not name:
             continue
-        records.append({"Name": name, "Mobile Number": mobile, "Email ID": email})
+        if email.lower() in ("nan", "none"):
+            email = ""
+
+        rec = {
+            "Name": name,
+            "Mobile Number": mobile,
+            "Email ID": email,
+        }
+        if course:
+            rec["Course"] = course
+        if comp_date:
+            rec["Completion Date"] = comp_date
+        if cert_no:
+            rec["Certificate Number"] = cert_no
+
+        records.append(rec)
     return records
 
 
 def build_report_dataframe(results: list) -> pd.DataFrame:
     """
     results: list of dicts with keys:
-        Name, Mobile Number, Email ID, Certificate Generated, Email Sent,
-        Sent Date & Time, Error Message
+        Name, Mobile Number, Email ID, Course, Certificate Number,
+        Certificate Generated, Email Sent, Sent Date & Time, Error Message
     """
     columns = [
         "Name",
         "Mobile Number",
         "Email ID",
+        "Course",
+        "Certificate Number",
         "Certificate Generated",
         "Email Sent",
         "Sent Date & Time",

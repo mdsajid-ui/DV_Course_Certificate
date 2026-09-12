@@ -194,10 +194,14 @@ def render_certificate_image(
     font_size: int = 60,
     text_color: tuple = (5, 3, 116),
     y_position_pct: float = 0.50,
+    certificate_number: str = None,
+    completion_date: str = None,
+    qr_png_path: str = None,
 ) -> Image.Image:
     """
     Return a copy of the template image with `name` drawn centered
     horizontally at `y_position_pct` (0.0 = top, 1.0 = bottom) of the image.
+    Optionally stamps QR code and details if provided.
     """
     img = template_img.copy()
     draw = ImageDraw.Draw(img)
@@ -212,6 +216,19 @@ def render_certificate_image(
     y = (img.height * y_position_pct) - (text_h / 2)
 
     draw.text((x, y), text, font=font, fill=text_color)
+
+    # Optional QR code overlay (bottom right)
+    if qr_png_path and os.path.exists(qr_png_path):
+        try:
+            qr_img = Image.open(qr_png_path).convert("RGBA")
+            qr_size = int(min(img.width, img.height) * 0.12)
+            qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.LANCZOS)
+            qr_x = int(img.width * 0.82) - (qr_size // 2)
+            qr_y = int(img.height * 0.72)
+            img.paste(qr_img, (qr_x, qr_y), qr_img if qr_img.mode == "RGBA" else None)
+        except Exception:
+            pass
+
     return img
 
 
@@ -230,6 +247,10 @@ def generate_certificate(
     text_color: tuple = (5, 3, 116),
     y_position_pct: float = 0.50,
     used_names: dict = None,
+    certificate_number: str = None,
+    completion_date: str = None,
+    qr_png_path: str = None,
+    custom_filename: str = None,
 ) -> str:
     """
     Generate one certificate for `name` and save it to `output_dir`.
@@ -239,14 +260,25 @@ def generate_certificate(
     used_names = used_names if used_names is not None else {}
 
     rendered = render_certificate_image(
-        template_img, name, font_path, font_size, text_color, y_position_pct
+        template_img,
+        name,
+        font_path=font_path,
+        font_size=font_size,
+        text_color=text_color,
+        y_position_pct=y_position_pct,
+        certificate_number=certificate_number,
+        completion_date=completion_date,
+        qr_png_path=qr_png_path,
     )
 
-    base = sanitize_filename(name)
-    used_names[base] = used_names.get(base, 0) + 1
-    suffix = "" if used_names[base] == 1 else f"_{used_names[base]}"
-    filename = f"{base}{suffix}_Certificate.pdf"
-    output_path = os.path.join(output_dir, filename)
+    if custom_filename:
+        filename = custom_filename if custom_filename.endswith(".pdf") else f"{custom_filename}.pdf"
+    else:
+        base = sanitize_filename(name)
+        used_names[base] = used_names.get(base, 0) + 1
+        suffix = "" if used_names[base] == 1 else f"_{used_names[base]}"
+        filename = f"{base}{suffix}_Certificate.pdf"
 
+    output_path = os.path.join(output_dir, filename)
     save_image_as_pdf(rendered, output_path)
     return output_path

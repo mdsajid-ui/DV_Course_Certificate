@@ -41,6 +41,7 @@ SHEETS_API_BASE = "https://sheets.googleapis.com/v4/spreadsheets"
 # Same spirit as utils.py's COLUMN_ALIASES — flexible header matching.
 COLUMN_ALIASES = {
     "name": ["name", "student name", "full name", "candidate name"],
+    "mobile": ["mobile", "mobile number", "phone", "contact", "phone number", "whatsapp", "cell"],
     "email": ["email", "email address", "e-mail", "mail id", "email id"],
     "course": ["course", "course name", "program", "programme"],
     "completion_date": [
@@ -81,10 +82,11 @@ class RosterRow:
     row_number: int  # 1-indexed sheet row, for reference/debugging only
     name: str
     email: str
-    course: str
-    completion_date: Optional[str]
-    status: Optional[str]
-    existing_certificate_number: Optional[str]
+    mobile: Optional[str] = ""
+    course: str = "Unknown Course"
+    completion_date: Optional[str] = None
+    status: Optional[str] = None
+    existing_certificate_number: Optional[str] = None
 
 
 class SheetAccessError(RuntimeError):
@@ -168,6 +170,7 @@ def get_roster(
                 row_number=i,
                 name=name,
                 email=email,
+                mobile=cell("mobile") or "",
                 course=cell("course") or "Unknown Course",
                 completion_date=cell("completion_date"),
                 status=cell("status"),

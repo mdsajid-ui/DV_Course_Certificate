@@ -7,7 +7,9 @@ Run with:  streamlit run app.py
 
 import os
 import io
+import re
 import zipfile
+from datetime import datetime
 
 import pandas as pd
 import streamlit as st
@@ -19,6 +21,7 @@ from certificate_generator import (
     render_certificate_image,
     suggest_text_style,
     suggest_name_position,
+    sanitize_filename,
 )
 from email_sender import EmailSender, SMTPConfig, is_valid_email
 from utils import (
@@ -346,314 +349,725 @@ def card_end():
 
 
 # ---------------------------------------------------------------------------
-# Session state
+# Session State Initialization
 # ---------------------------------------------------------------------------
 defaults = {
-    "records": [],
-    "column_map": {},
-    "template_path": None,
-    "template_fingerprint": None,
-    "cert_paths": {},
-    "results": [],
+    "records": [],  # List of dicts: [{"Name": ..., "Mobile Number": ..., "Email ID": ..., "Course": ..., "Completion Date": ..., "Certificate Number": ...}]
+    "template_mode": "Official APIDS / APDA Template",
+    "selected_official_course": "APIDS",
+    "custom_template_path": None,
+    "custom_template_fingerprint": None,
+    "cert_paths": {},  # email/name -> dict info
+    "results": [],     # delivery logs
     "font_size": 60,
     "y_pos_pct": 50,
     "text_color_hex": "#0B1B4D",
     "confirmed_params": None,
-    "sheet_roster": [],
-    "sheet_error": None,
-    "sending_in_progress": set(),
-    "email_subject_tpl": "Course Completion Certificate \u2013 {{student_name}}",
+    "email_subject_tpl": "Course Completion Certificate – {{Name}}",
     "email_body_tpl": (
-        "Dear {{student_name}},\n\n"
-        "Congratulations on successfully completing {{course_name}}.\n\n"
-        "Please find your course completion certificate attached to this email.\n"
-        "Certificate No: {{certificate_number}}\n"
-        "Date of Completion: {{issue_date}}\n\n"
-        "Regards,\nDV Analytics Team"
+        "Dear {{Name}},\n\n"
+        "Congratulations on successfully completing the {{Course}} program at DV Analytics!\n\n"
+        "Please find your official Course Completion Certificate attached to this email.\n"
+        "• Certificate Registration Number: {{CertNo}}\n"
+        "• Date of Completion: {{Date}}\n\n"
+        "You can verify the authenticity of your certificate at any time by scanning the QR code printed on the certificate.\n\n"
+        "We appreciate your dedication and wish you great success in your career journey.\n\n"
+        "Warm regards,\n"
+        "DV Analytics Team"
     ),
+    "institute_code": "DVA",
+    "cert_year": str(datetime.now().year),
+    "verification_base_url": os.environ.get("CERTIFICATE_VERIFICATION_BASE_URL", "http://localhost:8000"),
 }
+
 for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
 # ---------------------------------------------------------------------------
-# Sidebar — SMTP status
+# Sidebar — SMTP & Configuration Status
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("#### ✉️ SMTP status")
+    st.markdown("### ✉️ System Status")
     cfg = SMTPConfig()
     if cfg.is_configured():
-        st.markdown('<span class="dv-badge dv-badge-ok">● Connected</span>', unsafe_allow_html=True)
-        st.caption(f"{cfg.username}\nvia {cfg.host}:{cfg.port}")
+        st.markdown('<span class="dv-badge dv-badge-ok">● SMTP Connected</span>', unsafe_allow_html=True)
+        st.caption(f"**Host:** {cfg.host}:{cfg.port}\n**Sender:** {cfg.username}")
     else:
-        st.markdown('<span class="dv-badge dv-badge-warn">● Not configured</span>', unsafe_allow_html=True)
+        st.markdown('<span class="dv-badge dv-badge-warn">● SMTP Not Configured</span>', unsafe_allow_html=True)
         st.caption(
-            "Set **SMTP_EMAIL** and **SMTP_PASSWORD** as environment variables / "
-            "Streamlit secrets. Gmail requires an **App Password**, not your normal login."
+            "Configure **SMTP_EMAIL** and **SMTP_PASSWORD** (Gmail App Password) "
+            "in Streamlit secrets or environment variables."
         )
+
     st.divider()
-    st.caption("DV Analytics · Certificate & Email Suite")
+    st.markdown("### 📊 Active Roster Summary")
+    st.metric("Participants Loaded", len(st.session_state.records))
+    st.metric("Certificates Generated", len(st.session_state.cert_paths))
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    ["①  Upload", "②  Generate", "③  Send", "④  Dashboard", "⑤  Sheet + QR Certificates"]
-)
+    if st.session_state.records:
+        if st.button("🗑️ Clear Active Roster", use_container_width=True):
+            st.session_state.records = []
+            st.session_state.cert_paths = {}
+            st.rerun()
+
+    st.divider()
+    st.caption("DV Analytics · Certificate & Email Automation Suite")
+
 
 # ---------------------------------------------------------------------------
-# TAB 1 — Upload
+# Helper Functions
 # ---------------------------------------------------------------------------
-with tab1:
-    card_start("Participant list", "Required fields: Name, Mobile Number, Email ID — headers are matched flexibly.")
-    excel_file = st.file_uploader("Excel file (.xlsx)", type=["xlsx"], label_visibility="collapsed")
+def _apply_email_placeholders(tpl: str, *, name: str, course: str, cert_no: str, date: str, mobile: str = "") -> str:
+    res = tpl
+    res = re.sub(r"\{\{\s*(?:student_)?name\s*\}\}", name, res, flags=re.IGNORECASE)
+    res = re.sub(r"\{\{\s*(?:course|course_name)\s*\}\}", course, res, flags=re.IGNORECASE)
+    res = re.sub(r"\{\{\s*(?:certno|certificate_number|cert_no|reg_no)\s*\}\}", cert_no, res, flags=re.IGNORECASE)
+    res = re.sub(r"\{\{\s*(?:date|issue_date|completion_date)\s*\}\}", date, res, flags=re.IGNORECASE)
+    res = re.sub(r"\{\{\s*(?:mobile|phone|mobile_number)\s*\}\}", mobile, res, flags=re.IGNORECASE)
+    return res
 
-    if excel_file:
-        try:
-            df = pd.read_excel(excel_file)
-            is_valid, column_map, missing = validate_excel_columns(df)
-            if not is_valid:
-                st.error(f"Missing required column(s): {', '.join(missing)}")
-            else:
-                records = normalize_records(df, column_map)
-                st.session_state.records = records
-                st.session_state.column_map = column_map
-                mapping_str = " · ".join(f"{k} → `{v}`" for k, v in column_map.items())
-                st.markdown(f'<span class="dv-badge dv-badge-ok">✓ {len(records)} records validated</span>', unsafe_allow_html=True)
-                st.caption(mapping_str)
-                st.dataframe(pd.DataFrame(records), use_container_width=True, height=220)
-        except Exception as e:
-            st.error(f"Could not read Excel file: {e}")
-    card_end()
 
-    card_start("Certificate template", "PNG, JPG, or PDF — the name is drawn centered on top of this image.")
-    template_file = st.file_uploader("Certificate template", type=["png", "jpg", "jpeg", "pdf"], label_visibility="collapsed")
+def build_participant_cert(rec: dict, template_mode: str, default_course: str) -> tuple[str, str, bool]:
+    """
+    Generates or retrieves certificate PDF for a participant record.
+    Returns (certificate_number, pdf_path, was_new).
+    """
+    name = rec.get("Name", "").strip()
+    email = rec.get("Email ID", "").strip()
+    course = rec.get("Course") or default_course
+    completion_date = rec.get("Completion Date") or datetime.now().strftime("%d-%b-%Y")
+    existing_cert_no = rec.get("Certificate Number")
 
-    if template_file:
-        template_path = os.path.join(OUTPUT_DIR, f"template{os.path.splitext(template_file.name)[1]}")
-        with open(template_path, "wb") as f:
-            f.write(template_file.getbuffer())
-        st.session_state.template_path = template_path
+    # Issue or retrieve authoritative number
+    cert_record = cert_store.issue_or_get_certificate_number(
+        name=name,
+        email=email,
+        course=course,
+        completion_date=completion_date,
+        institute_code=st.session_state.institute_code.strip() or "DVA",
+        course_code=course.strip() or "APIDS",
+        year=st.session_state.cert_year.strip() or str(datetime.now().year),
+        existing_number=existing_cert_no,
+    )
+    cert_number = cert_record.cert_number
 
-        fingerprint = (template_file.name, template_file.size)
-        is_new_template = fingerprint != st.session_state.template_fingerprint
+    # Generate QR code
+    verify_url = qr_utils.verification_url(cert_number, base_url=st.session_state.verification_base_url)
+    qr_bytes = qr_utils.make_qr_image_bytes(verify_url)
+    qr_path = os.path.join(CERT_DIR, f"qr_{cert_number}.png")
+    with open(qr_path, "wb") as f:
+        f.write(qr_bytes)
 
-        template_img = load_template_as_image(template_path)
+    pdf_path = os.path.join(CERT_DIR, f"{cert_number}.pdf")
+    was_new = not os.path.exists(pdf_path)
 
-        if is_new_template:
-            st.session_state.template_fingerprint = fingerprint
-            # Auto-detect a blank band on the template first (fixes the name
-            # landing on top of printed text like "has successfully
-            # participated in..."), then tune font size/color for that spot.
-            suggested_y = suggest_name_position(template_img)
-            suggested_size, suggested_color = suggest_text_style(template_img, suggested_y)
-            st.session_state.y_pos_pct = int(round(suggested_y * 100))
-            st.session_state.font_size = suggested_size
-            st.session_state.text_color_hex = "#%02x%02x%02x" % suggested_color
-            st.session_state.confirmed_params = None
-            st.markdown('<span class="dv-badge dv-badge-ok">✓ Template uploaded — name placement auto-detected</span>', unsafe_allow_html=True)
-        else:
-            st.markdown('<span class="dv-badge dv-badge-ok">✓ Template uploaded</span>', unsafe_allow_html=True)
+    if template_mode == "Official APIDS / APDA Template":
+        # Select official template file
+        course_clean = course.upper() if course.upper() in ("APIDS", "APDA") else "APIDS"
+        template_file = os.path.join("assets", "templates", f"certificate_{course_clean}_blank.pptx")
+        if not os.path.exists(template_file):
+            template_file = os.path.join("assets", "templates", "certificate_APIDS_blank.pptx")
 
-        with st.expander("🎨 Customize name placement, size & color", expanded=False):
-            c1, c2 = st.columns(2)
-            with c1:
-                font_size = st.slider("Font size (px)", 20, 300, key="font_size")
-                y_pos = st.slider("Vertical position (% down)", 0, 100, key="y_pos_pct") / 100.0
-            with c2:
-                color_hex = st.color_picker("Text color", key="text_color_hex")
-                if st.button("↺ Auto-fit to this template"):
-                    s_y = suggest_name_position(template_img)
-                    s_size, s_color = suggest_text_style(template_img, s_y)
-                    st.session_state.y_pos_pct = int(round(s_y * 100))
-                    st.session_state.font_size = s_size
-                    st.session_state.text_color_hex = "#%02x%02x%02x" % s_color
-                    st.session_state.confirmed_params = None
-                    st.rerun()
-
+        pptx_certificate.render_certificate_pdf(
+            name=name,
+            certificate_number=cert_number,
+            completion_date=completion_date,
+            qr_png_path=qr_path,
+            template_path=template_file,
+            output_pdf_path=pdf_path,
+        )
+    else:
+        # Custom image/pdf template
+        custom_path = st.session_state.custom_template_path
+        if not custom_path or not os.path.exists(custom_path):
+            raise FileNotFoundError("Custom template file not found. Please upload a template in Tab 1.")
+        
+        template_img = load_template_as_image(custom_path)
         font_size = st.session_state.font_size
         y_pos = st.session_state.y_pos_pct / 100.0
         color_hex = st.session_state.text_color_hex
         text_color = tuple(int(color_hex.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
 
-        if st.session_state.records:
-            sample_name = st.session_state.records[0]["Name"]
+        generate_certificate(
+            template_img=template_img,
+            name=name,
+            output_dir=CERT_DIR,
+            font_size=font_size,
+            text_color=text_color,
+            y_position_pct=y_pos,
+            certificate_number=cert_number,
+            completion_date=completion_date,
+            qr_png_path=qr_path,
+            custom_filename=cert_number,
+        )
+
+    return cert_number, pdf_path, was_new
+
+
+# ---------------------------------------------------------------------------
+# TAB LAYOUT (4 Tabs)
+# ---------------------------------------------------------------------------
+tab1, tab2, tab3, tab4 = st.tabs(
+    [
+        "① Add Participants & Template",
+        "② Generate Certificates",
+        "③ Sending Formalities",
+        "④ Delivery Report & Analytics",
+    ]
+)
+
+# ===========================================================================
+# TAB 1 — Add Participants & Template
+# ===========================================================================
+with tab1:
+    card_start("1. Add Participants", "Add student details manually or upload in bulk via Excel, CSV, or Google Sheets.")
+
+    input_mode = st.radio(
+        "Choose Input Method",
+        ["📝 Manual Entry & Editable Grid", "📁 Bulk Upload (Excel / CSV)", "🌐 Google Sheets Sync"],
+        horizontal=True,
+    )
+
+    # ------------------ Sub-Mode 1: Manual Entry ------------------
+    if input_mode == "📝 Manual Entry & Editable Grid":
+        st.markdown("##### ➕ Quick Add Student")
+        with st.form("manual_add_form", clear_on_submit=True):
+            mc1, mc2, mc3 = st.columns(3)
+            with mc1:
+                m_name = st.text_input("Student Name *", placeholder="e.g. John Doe")
+                m_course = st.selectbox("Course", ["APIDS", "APDA", "Data Science", "Data Analytics"], index=0)
+            with mc2:
+                m_mobile = st.text_input("Mobile Number", placeholder="e.g. +91 9876543210")
+                m_date = st.text_input("Completion Date", value=datetime.now().strftime("%d-%b-%Y"))
+            with mc3:
+                m_email = st.text_input("Email ID *", placeholder="e.g. john.doe@example.com")
+                m_cert_no = st.text_input("Certificate Number (Optional)", placeholder="Auto-generated if blank")
+
+            add_btn = st.form_submit_button("➕ Add Student to Roster", use_container_width=True)
+            if add_btn:
+                if not m_name.strip() or not m_email.strip():
+                    st.error("⚠️ Please enter both Student Name and Email ID.")
+                elif not is_valid_email(m_email):
+                    st.error(f"⚠️ '{m_email}' is not a valid email address.")
+                else:
+                    new_rec = {
+                        "Name": m_name.strip(),
+                        "Mobile Number": m_mobile.strip(),
+                        "Email ID": m_email.strip(),
+                        "Course": m_course.strip(),
+                        "Completion Date": m_date.strip(),
+                        "Certificate Number": m_cert_no.strip(),
+                    }
+                    existing_idx = next((i for i, r in enumerate(st.session_state.records) if r["Email ID"].lower() == m_email.strip().lower()), None)
+                    if existing_idx is not None:
+                        st.session_state.records[existing_idx] = new_rec
+                        st.success(f"✓ Updated record for **{m_name}** ({m_email})")
+                    else:
+                        st.session_state.records.append(new_rec)
+                        st.success(f"✓ Added **{m_name}** ({m_email}) to roster")
+                    st.rerun()
+
+        st.markdown("##### ✏️ Interactive Participant Grid (Edit, Add, or Delete Rows)")
+        st.caption("You can directly type into the table below, paste cells, or use the '+' row button at the bottom.")
+
+        current_df = pd.DataFrame(st.session_state.records)
+        for col in ["Name", "Mobile Number", "Email ID", "Course", "Completion Date", "Certificate Number"]:
+            if col not in current_df.columns:
+                current_df[col] = ""
+
+        edited_df = st.data_editor(
+            current_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            height=250,
+            key="roster_editor",
+            column_config={
+                "Name": st.column_config.TextColumn("Student Name", required=True),
+                "Mobile Number": st.column_config.TextColumn("Mobile Number"),
+                "Email ID": st.column_config.TextColumn("Email ID", required=True),
+                "Course": st.column_config.SelectboxColumn("Course", options=["APIDS", "APDA", "Data Science", "Data Analytics"], default="APIDS"),
+                "Completion Date": st.column_config.TextColumn("Completion Date", default=datetime.now().strftime("%d-%b-%Y")),
+                "Certificate Number": st.column_config.TextColumn("Certificate Number (Optional)"),
+            },
+        )
+
+        if st.button("💾 Save Grid Changes to Active Roster"):
+            cleaned_records = []
+            for _, row in edited_df.iterrows():
+                name_val = str(row.get("Name", "")).strip()
+                email_val = str(row.get("Email ID", "")).strip()
+                if name_val and name_val.lower() not in ("nan", "none") and email_val and email_val.lower() not in ("nan", "none"):
+                    cleaned_records.append({
+                        "Name": name_val,
+                        "Mobile Number": str(row.get("Mobile Number", "")).strip() if str(row.get("Mobile Number", "")).lower() not in ("nan", "none") else "",
+                        "Email ID": email_val,
+                        "Course": str(row.get("Course", "APIDS")).strip() if str(row.get("Course", "")).lower() not in ("nan", "none") else "APIDS",
+                        "Completion Date": str(row.get("Completion Date", "")).strip() if str(row.get("Completion Date", "")).lower() not in ("nan", "none") else datetime.now().strftime("%d-%b-%Y"),
+                        "Certificate Number": str(row.get("Certificate Number", "")).strip() if str(row.get("Certificate Number", "")).lower() not in ("nan", "none") else "",
+                    })
+            st.session_state.records = cleaned_records
+            st.success(f"✓ Saved {len(cleaned_records)} participants to active roster.")
+            st.rerun()
+
+    # ------------------ Sub-Mode 2: Bulk Upload ------------------
+    elif input_mode == "📁 Bulk Upload (Excel / CSV)":
+        bulk_file = st.file_uploader("Upload Participant File (.xlsx, .xls, .csv)", type=["xlsx", "xls", "csv"])
+        
+        sample_col, _ = st.columns([1, 2])
+        with sample_col:
+            sample_data = pd.DataFrame([
+                {"Name": "Aarav Sharma", "Mobile Number": "+91 9876543210", "Email ID": "aarav.sharma@example.com", "Course": "APIDS", "Completion Date": "15-May-2026"},
+                {"Name": "Ananya Patel", "Mobile Number": "+91 9812345678", "Email ID": "ananya.patel@example.com", "Course": "APDA", "Completion Date": "15-May-2026"},
+            ])
+            sample_buffer = io.BytesIO()
+            sample_data.to_excel(sample_buffer, index=False)
+            st.download_button(
+                "⬇️ Download Sample Excel Template",
+                data=sample_buffer.getvalue(),
+                file_name="sample_participants_template.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+
+        if bulk_file:
+            try:
+                if bulk_file.name.endswith(".csv"):
+                    df = pd.read_csv(bulk_file)
+                else:
+                    df = pd.read_excel(bulk_file)
+
+                is_valid, column_map, missing = validate_excel_columns(df)
+                if not is_valid:
+                    st.error(f"❌ Missing required columns: {', '.join(missing)}. Please check your file.")
+                else:
+                    records = normalize_records(df, column_map)
+                    mapping_str = " · ".join(f"{k} → `{v}`" for k, v in column_map.items())
+                    st.markdown(f'<span class="dv-badge dv-badge-ok">✓ {len(records)} records loaded from {bulk_file.name}</span>', unsafe_allow_html=True)
+                    st.caption(f"Detected Column Mapping: {mapping_str}")
+                    st.dataframe(pd.DataFrame(records), use_container_width=True, height=200)
+
+                    c_act1, c_act2 = st.columns(2)
+                    with c_act1:
+                        if st.button("➕ Replace Active Roster with Uploaded File", use_container_width=True):
+                            st.session_state.records = records
+                            st.session_state.cert_paths = {}
+                            st.success(f"✓ Active roster set to {len(records)} participants.")
+                            st.rerun()
+                    with c_act2:
+                        if st.button("📥 Append to Current Active Roster", use_container_width=True):
+                            existing_emails = {r["Email ID"].lower() for r in st.session_state.records}
+                            added = 0
+                            for r in records:
+                                if r["Email ID"].lower() not in existing_emails:
+                                    st.session_state.records.append(r)
+                                    existing_emails.add(r["Email ID"].lower())
+                                    added += 1
+                            st.success(f"✓ Appended {added} new participants to active roster (total: {len(st.session_state.records)}).")
+                            st.rerun()
+            except Exception as e:
+                st.error(f"Could not read uploaded file: {e}")
+
+    # ------------------ Sub-Mode 3: Google Sheets Sync ------------------
+    else:
+        st.markdown("##### 🌐 Fetch from Shared Google Sheet")
+        g_url = st.text_input(
+            "Google Sheet URL or Spreadsheet ID",
+            value=get_secret("DEFAULT_SHEET_URL", "https://docs.google.com/spreadsheets/d/1vTrLQiIvB6fMTUgsQtuJcnFR-Z3VVY_ALTRKF2dH0Jw/edit?usp=sharing"),
+        )
+        g_tab = st.text_input("Worksheet / Tab Name (Optional)", placeholder="e.g. Sheet1")
+
+        if st.button("🔄 Fetch Roster from Google Sheet"):
+            try:
+                roster_rows = sheets_readonly.get_roster(g_url, worksheet_name=g_tab or None)
+                if not roster_rows:
+                    st.warning("No rows found in the specified Google Sheet.")
+                else:
+                    sheet_records = []
+                    for r in roster_rows:
+                        sheet_records.append({
+                            "Name": r.name,
+                            "Mobile Number": r.mobile or "",
+                            "Email ID": r.email,
+                            "Course": r.course or "APIDS",
+                            "Completion Date": r.completion_date or datetime.now().strftime("%d-%b-%Y"),
+                            "Certificate Number": r.existing_certificate_number or "",
+                        })
+                    st.session_state.records = sheet_records
+                    st.session_state.cert_paths = {}
+                    st.success(f"✓ Successfully imported {len(sheet_records)} participants from Google Sheet!")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Failed to fetch Google Sheet: {e}")
+
+    # Active roster status banner
+    if st.session_state.records:
+        st.markdown("---")
+        rc1, rc2 = st.columns([3, 1])
+        with rc1:
+            st.markdown(f'<span class="dv-badge dv-badge-ok">✓ Active Roster: {len(st.session_state.records)} Participants Loaded</span>', unsafe_allow_html=True)
+        with rc2:
+            export_df = pd.DataFrame(st.session_state.records)
+            csv_data = export_df.to_csv(index=False).encode("utf-8")
+            st.download_button("⬇️ Export Roster (CSV)", csv_data, file_name="active_roster.csv", mime="text/csv", use_container_width=True)
+
+    card_end()
+
+    # ------------------ Template Selection ------------------
+    card_start("2. Certificate Template & Design", "Select the official DV Analytics course template or upload a custom template.")
+
+    tpl_mode = st.radio(
+        "Certificate Template Type",
+        ["🎓 Official DV Analytics Templates (APIDS / APDA)", "🎨 Custom Template (PNG / JPG / PDF)"],
+        horizontal=True,
+    )
+    st.session_state.template_mode = "Official APIDS / APDA Template" if "Official" in tpl_mode else "Custom Template"
+
+    if st.session_state.template_mode == "Official APIDS / APDA Template":
+        col_t1, col_t2 = st.columns(2)
+        with col_t1:
+            st.session_state.selected_official_course = st.selectbox(
+                "Select Official Course Template",
+                ["APIDS", "APDA"],
+                index=0 if st.session_state.selected_official_course == "APIDS" else 1,
+                help="APIDS = Advanced Program in Data Science, APDA = Advanced Program in Data Analytics",
+            )
+            st.session_state.institute_code = st.text_input("Institute Code Prefix", value=st.session_state.institute_code)
+        with col_t2:
+            st.session_state.cert_year = st.text_input("Certificate Year", value=st.session_state.cert_year)
+            st.session_state.verification_base_url = st.text_input(
+                "Verification Base URL (for QR Code)",
+                value=st.session_state.verification_base_url,
+                help="QR codes point to {this}/verify/{cert_number}",
+            )
+
+        st.info(
+            f"ℹ️ **Selected Template:** `certificate_{st.session_state.selected_official_course}_blank.pptx`\n\n"
+            f"• Features: Crisp vector typography, automatic Certificate Numbering (`{st.session_state.institute_code}-{st.session_state.selected_official_course}-{st.session_state.cert_year}-000001`), "
+            f"Date stamping, and high-precision **Scan to Verify QR Code**."
+        )
+
+    else:
+        custom_file = st.file_uploader("Upload Custom Template (PNG, JPG, PDF)", type=["png", "jpg", "jpeg", "pdf"])
+        if custom_file:
+            custom_path = os.path.join(OUTPUT_DIR, f"template{os.path.splitext(custom_file.name)[1]}")
+            with open(custom_path, "wb") as f:
+                f.write(custom_file.getbuffer())
+            st.session_state.custom_template_path = custom_path
+
+            fingerprint = (custom_file.name, custom_file.size)
+            if fingerprint != st.session_state.custom_template_fingerprint:
+                st.session_state.custom_template_fingerprint = fingerprint
+                template_img = load_template_as_image(custom_path)
+                s_y = suggest_name_position(template_img)
+                s_size, s_color = suggest_text_style(template_img, s_y)
+                st.session_state.y_pos_pct = int(round(s_y * 100))
+                st.session_state.font_size = s_size
+                st.session_state.text_color_hex = "#%02x%02x%02x" % s_color
+
+            with st.expander("🎨 Name Placement, Font Size & Color", expanded=True):
+                c_f1, c_f2 = st.columns(2)
+                with c_f1:
+                    st.slider("Font size (px)", 20, 300, key="font_size")
+                    st.slider("Vertical position (% down)", 0, 100, key="y_pos_pct")
+                with c_f2:
+                    st.color_picker("Text color", key="text_color_hex")
+                    if st.button("↺ Auto-fit to Template"):
+                        t_img = load_template_as_image(custom_path)
+                        s_y = suggest_name_position(t_img)
+                        s_size, s_color = suggest_text_style(t_img, s_y)
+                        st.session_state.y_pos_pct = int(round(s_y * 100))
+                        st.session_state.font_size = s_size
+                        st.session_state.text_color_hex = "#%02x%02x%02x" % s_color
+                        st.rerun()
+
+            # Live preview on custom template
+            template_img = load_template_as_image(custom_path)
+            sample_name = st.session_state.records[0]["Name"] if st.session_state.records else "Sample Student"
+            font_size = st.session_state.font_size
+            y_pos = st.session_state.y_pos_pct / 100.0
+            color_hex = st.session_state.text_color_hex
+            text_color = tuple(int(color_hex.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+            
             preview_img = render_certificate_image(
                 template_img, sample_name, None, font_size, text_color, y_pos
             )
-            st.image(preview_img, caption=f"Live preview — {sample_name}", use_container_width=True)
+            st.image(preview_img, caption=f"Template Preview ({sample_name})", use_container_width=True)
 
-            current_params = (fingerprint, font_size, round(y_pos, 3), color_hex)
-            confirmed = st.checkbox(
-                "✅ I can clearly see the name above on the certificate",
-                value=(st.session_state.confirmed_params == current_params),
-            )
-            if confirmed:
-                st.session_state.confirmed_params = current_params
-            elif st.session_state.confirmed_params == current_params:
-                st.session_state.confirmed_params = None
-        else:
-            st.info("Upload the participant list above to preview a sample name on this template.")
     card_end()
 
-# ---------------------------------------------------------------------------
+
+# ===========================================================================
 # TAB 2 — Generate Certificates
-# ---------------------------------------------------------------------------
+# ===========================================================================
 with tab2:
-    card_start("Generate certificates")
+    card_start("Generate Certificates", "Generate personalized, high-resolution certificates with verification QR codes.")
 
     records = st.session_state.records
-    template_path = st.session_state.template_path
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total records", len(records))
-    c2.metric("Template ready", "Yes" if template_path else "No")
-    c3.metric("Certificates generated", len(st.session_state.cert_paths))
-
-    fingerprint = st.session_state.template_fingerprint
-    font_size = st.session_state.font_size
-    y_pos = st.session_state.y_pos_pct / 100.0
-    color_hex = st.session_state.text_color_hex
-    text_color = tuple(int(color_hex.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
-    current_params = (fingerprint, font_size, round(y_pos, 3), color_hex)
-    preview_confirmed = st.session_state.confirmed_params == current_params and fingerprint is not None
-
-    disabled = not (records and template_path)
-    if disabled:
-        st.info("Upload both the participant list and the certificate template in Step ① first.")
-    elif not preview_confirmed:
-        st.warning("Go back to Step ① and confirm the name preview looks correct before generating in bulk.")
-
-    if st.button("🎓  Generate Certificates", disabled=disabled or not preview_confirmed, key="btn_generate"):
-        template_img = load_template_as_image(template_path)
-        progress = st.progress(0, text="Starting...")
-        used_names = {}
-        cert_paths = {}
-        for i, rec in enumerate(records):
-            name = rec["Name"]
-            try:
-                path = generate_certificate(
-                    template_img, name, CERT_DIR,
-                    font_path=None, font_size=font_size,
-                    text_color=text_color, y_position_pct=y_pos,
-                    used_names=used_names,
-                )
-                cert_paths[name] = path
-            except Exception as e:
-                cert_paths[name] = None
-                log_event(rec.get("Email ID", ""), "CERT_GENERATION_FAILED", str(e))
-            progress.progress((i + 1) / len(records), text=f"Generating {i+1} of {len(records)} — {name}")
-        st.session_state.cert_paths = cert_paths
-        progress.empty()
-        ok_count = sum(1 for v in cert_paths.values() if v)
-        st.success(f"Done — {ok_count} of {len(records)} certificates generated.")
-
-    if st.session_state.cert_paths:
-        st.markdown("**Review**")
-        review_df = pd.DataFrame(
-            [{"Name": n, "Certificate Generated": "Yes" if p else "No"}
-             for n, p in st.session_state.cert_paths.items()]
-        )
-        st.dataframe(review_df, use_container_width=True, height=220)
-
-        sample_paths = [p for p in st.session_state.cert_paths.values() if p]
-        if sample_paths:
-            with st.expander("🔍 Preview a generated certificate"):
-                st.image(load_template_as_image(sample_paths[0]), use_container_width=True)
-    card_end()
-
-# ---------------------------------------------------------------------------
-# TAB 3 — Send Certificates
-# ---------------------------------------------------------------------------
-with tab3:
-    card_start("Compose email")
-
-    subject = st.text_input("Subject", "Congratulations! Your Certificate is Ready")
-    body_template = st.text_area(
-        "Body (use {{Name}} to insert the participant's name)",
-        value=(
-            "Dear {{Name}},\n\n"
-            "Thank you for participating in our program.\n"
-            "Please find your certificate attached to this email.\n\n"
-            "We appreciate your participation and wish you all the best for your "
-            "future endeavors.\n\n"
-            "Regards,\nDV Analytics Team"
-        ),
-        height=200,
-    )
-    card_end()
-
-    card_start("Send")
-    records = st.session_state.records
-    cert_paths = st.session_state.cert_paths
-
-    total = len(records)
-    sent_count = sum(1 for r in st.session_state.results if r.get("Email Sent") == "Yes")
-    failed_count = sum(1 for r in st.session_state.results if r.get("Email Sent") == "No")
-    pending_count = total - sent_count - failed_count
+    total_recs = len(records)
+    generated_count = len(st.session_state.cert_paths)
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Total Records", total)
-    m2.metric("Sent Successfully", sent_count)
-    m3.metric("Failed", failed_count)
-    m4.metric("Pending", max(pending_count, 0))
+    m1.metric("Total Participants", total_recs)
+    m2.metric("Template Mode", "Official PPTX" if "Official" in st.session_state.template_mode else "Custom Image")
+    m3.metric("Certificates Generated", generated_count)
+    m4.metric("Pending Generation", max(total_recs - generated_count, 0))
 
-    can_send = bool(records) and bool(cert_paths) and SMTPConfig().is_configured()
-    if not records or not cert_paths:
-        st.info("Generate certificates in Step ② before sending.")
-    elif not SMTPConfig().is_configured():
-        st.warning("SMTP is not configured — see the sidebar.")
+    if total_recs == 0:
+        st.info("⚠️ Please add participants in **Step ① Add Participants & Template** first.")
+    else:
+        st.markdown("##### ⚡ Generation Actions")
+        g_col1, g_col2 = st.columns([1, 1])
 
-    if st.button("✉️  Send Certificates", disabled=not can_send, key="btn_send"):
-        progress = st.progress(0, text="Starting...")
+        with g_col1:
+            if st.button("🎓 Generate All Certificates", use_container_width=True, disabled=(total_recs == 0)):
+                progress = st.progress(0, text="Initializing generation...")
+                cert_paths = {}
+                default_course = st.session_state.selected_official_course
+
+                for i, rec in enumerate(records):
+                    name = rec["Name"]
+                    email = rec.get("Email ID", "")
+                    progress.progress((i + 1) / total_recs, text=f"Generating {i+1} of {total_recs}: {name}")
+                    try:
+                        cert_no, pdf_path, _ = build_participant_cert(
+                            rec, st.session_state.template_mode, default_course
+                        )
+                        cert_paths[email or name] = {
+                            "Name": name,
+                            "Email": email,
+                            "Course": rec.get("Course") or default_course,
+                            "CertNumber": cert_no,
+                            "Path": pdf_path,
+                            "Status": "Generated",
+                        }
+                    except Exception as e:
+                        cert_paths[email or name] = {
+                            "Name": name,
+                            "Email": email,
+                            "Course": rec.get("Course") or default_course,
+                            "CertNumber": "Error",
+                            "Path": None,
+                            "Status": f"Failed: {e}",
+                        }
+                        log_event(email, "CERT_GEN_ERROR", str(e))
+
+                st.session_state.cert_paths = cert_paths
+                progress.empty()
+                ok_count = sum(1 for v in cert_paths.values() if v.get("Path"))
+                st.success(f"✓ Generation complete! Successfully generated {ok_count} of {total_recs} certificates.")
+                st.rerun()
+
+        with g_col2:
+            if st.button("👁️ Instant Preview / Test (First Student)", use_container_width=True, disabled=(total_recs == 0)):
+                try:
+                    first_rec = records[0]
+                    default_course = st.session_state.selected_official_course
+                    cert_no, pdf_path, _ = build_participant_cert(first_rec, st.session_state.template_mode, default_course)
+                    st.success(f"✓ Generated Preview Certificate: **{cert_no}** for **{first_rec['Name']}**")
+                    with open(pdf_path, "rb") as f:
+                        st.download_button(
+                            f"⬇️ Download Preview PDF ({cert_no}.pdf)",
+                            data=f.read(),
+                            file_name=f"{cert_no}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True,
+                        )
+                except Exception as e:
+                    st.error(f"Could not build preview certificate: {e}")
+
+        # Review Table & Zip Download
+        if st.session_state.cert_paths:
+            st.markdown("---")
+            st.markdown("##### 📋 Generated Certificates Roster")
+
+            review_rows = []
+            for k, info in st.session_state.cert_paths.items():
+                review_rows.append({
+                    "Student Name": info.get("Name"),
+                    "Email ID": info.get("Email"),
+                    "Course": info.get("Course"),
+                    "Certificate Number": info.get("CertNumber"),
+                    "Status": "✅ Ready" if info.get("Path") else f"❌ {info.get('Status')}",
+                })
+            st.dataframe(pd.DataFrame(review_rows), use_container_width=True, height=240)
+
+            # Zip download
+            valid_paths = [info["Path"] for info in st.session_state.cert_paths.values() if info.get("Path") and os.path.exists(info["Path"])]
+            if valid_paths:
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for p in valid_paths:
+                        zf.write(p, arcname=os.path.basename(p))
+                st.download_button(
+                    "📦 Download All Generated Certificates (.zip)",
+                    data=zip_buffer.getvalue(),
+                    file_name="All_Certificates.zip",
+                    mime="application/zip",
+                    use_container_width=True,
+                )
+
+    card_end()
+
+
+# ===========================================================================
+# TAB 3 — Sending Formalities
+# ===========================================================================
+with tab3:
+    card_start("1. SMTP Status & Configuration", "Verify your email server connectivity before dispatching certificates.")
+
+    smtp_cfg = SMTPConfig()
+    s_col1, s_col2 = st.columns([2, 1])
+    with s_col1:
+        if smtp_cfg.is_configured():
+            st.markdown(f'<span class="dv-badge dv-badge-ok">● SMTP Connected ({smtp_cfg.username})</span>', unsafe_allow_html=True)
+            st.caption(f"Host: `{smtp_cfg.host}:{smtp_cfg.port}` · Sender: `{smtp_cfg.sender_name}`")
+        else:
+            st.markdown('<span class="dv-badge dv-badge-warn">● SMTP Not Configured</span>', unsafe_allow_html=True)
+            st.caption("Please configure **SMTP_EMAIL** and **SMTP_PASSWORD** (Gmail App Password) in Streamlit secrets.")
+
+    with s_col2:
+        with st.expander("🧪 Send Test Email"):
+            test_recipient = st.text_input("Test Email Address", value=smtp_cfg.username)
+            if st.button("Send Test", use_container_width=True, disabled=not smtp_cfg.is_configured()):
+                try:
+                    with EmailSender() as sender:
+                        sender.send(
+                            test_recipient,
+                            "DV Analytics SMTP Connection Test",
+                            "Hello! This is a test email confirming your DV Analytics Certificate delivery system is functioning perfectly.",
+                        )
+                    st.success("✓ Test email sent successfully!")
+                except Exception as e:
+                    st.error(f"Test email failed: {e}")
+    card_end()
+
+    card_start("2. Dynamic Email Composer", "Compose your subject and message. Dynamic tags are personalized per participant.")
+
+    col_em1, col_em2 = st.columns(2)
+    with col_em1:
+        email_subj = st.text_input("Email Subject", key="email_subject_tpl")
+    with col_em2:
+        st.markdown(
+            "**Available Tags:** &nbsp; `{{Name}}` &nbsp; `{{Course}}` &nbsp; `{{CertNo}}` &nbsp; `{{Date}}` &nbsp; `{{Mobile}}`",
+            unsafe_allow_html=True,
+        )
+
+    email_body = st.text_area("Email Body", height=180, key="email_body_tpl")
+
+    # Live Preview of first recipient
+    if st.session_state.records:
+        with st.expander("👁️ Live Preview for First Recipient"):
+            sample_rec = st.session_state.records[0]
+            sample_name = sample_rec["Name"]
+            sample_course = sample_rec.get("Course") or st.session_state.selected_official_course
+            sample_cert = sample_rec.get("Certificate Number") or "DVA-APIDS-2026-000001"
+            sample_date = sample_rec.get("Completion Date") or datetime.now().strftime("%d-%b-%Y")
+            sample_mob = sample_rec.get("Mobile Number", "")
+
+            prev_subj = _apply_email_placeholders(email_subj, name=sample_name, course=sample_course, cert_no=sample_cert, date=sample_date, mobile=sample_mob)
+            prev_body = _apply_email_placeholders(email_body, name=sample_name, course=sample_course, cert_no=sample_cert, date=sample_date, mobile=sample_mob)
+
+            st.markdown(f"**To:** `{sample_rec.get('Email ID', 'student@example.com')}`")
+            st.markdown(f"**Subject:** {prev_subj}")
+            st.text_area("Rendered Message", value=prev_body, height=130, disabled=True)
+
+    card_end()
+
+    card_start("3. Bulk Email Dispatch", "Send certificates directly to participants with attachment and delivery logging.")
+
+    records = st.session_state.records
+    total_recs = len(records)
+    cert_map = st.session_state.cert_paths
+
+    sent_count = sum(1 for r in st.session_state.results if r.get("Email Sent") == "Yes")
+    failed_count = sum(1 for r in st.session_state.results if r.get("Email Sent") == "No")
+    ready_to_send = sum(1 for info in cert_map.values() if info.get("Path") and os.path.exists(info["Path"]))
+
+    sm1, sm2, sm3, sm4 = st.columns(4)
+    sm1.metric("Total Participants", total_recs)
+    sm2.metric("Certificates Ready", ready_to_send)
+    sm3.metric("Emails Sent", sent_count)
+    sm4.metric("Pending / Failed", max(total_recs - sent_count, 0))
+
+    can_send = bool(total_recs > 0 and ready_to_send > 0 and smtp_cfg.is_configured())
+
+    if not records:
+        st.info("Add participants in Tab ① first.")
+    elif ready_to_send == 0:
+        st.warning("Generate certificates in Tab ② before sending.")
+    elif not smtp_cfg.is_configured():
+        st.error("SMTP is not configured. Please add SMTP credentials in Streamlit secrets.")
+
+    if st.button("✉️ Send Certificates in Bulk", use_container_width=True, disabled=not can_send):
+        progress = st.progress(0, text="Connecting to SMTP server...")
         results = []
-        sender = EmailSender()
+        default_course = st.session_state.selected_official_course
+
+        sender = None
         try:
+            sender = EmailSender()
             sender.connect()
         except Exception as e:
             st.error(f"Could not connect to SMTP server: {e}")
-            sender = None
 
         for i, rec in enumerate(records):
             name = rec["Name"]
-            mobile = rec.get("Mobile Number", "")
-            email = rec.get("Email ID", "")
-            cert_path = cert_paths.get(name)
-            row = {
+            email = rec.get("Email ID", "").strip()
+            mobile = rec.get("Mobile Number", "").strip()
+            course = rec.get("Course") or default_course
+            date_val = rec.get("Completion Date") or datetime.now().strftime("%d-%b-%Y")
+
+            info = cert_map.get(email or name, {})
+            cert_path = info.get("Path")
+            cert_no = info.get("CertNumber") or rec.get("Certificate Number", "")
+
+            row_res = {
                 "Name": name,
                 "Mobile Number": mobile,
                 "Email ID": email,
-                "Certificate Generated": "Yes" if cert_path else "No",
+                "Course": course,
+                "Certificate Number": cert_no,
+                "Certificate Generated": "Yes" if (cert_path and os.path.exists(cert_path)) else "No",
                 "Email Sent": "No",
                 "Sent Date & Time": "",
                 "Error Message": "",
             }
 
-            progress.progress((i + 1) / total, text=f"Sending {i+1} of {total} — {name}")
+            progress.progress((i + 1) / total_recs, text=f"Sending {i+1} of {total_recs}: {name} ({email})")
 
-            if not cert_path:
-                row["Error Message"] = "Certificate not generated"
-                log_event(email, "SKIPPED", "Certificate not generated")
-                results.append(row)
+            if not email or not is_valid_email(email):
+                row_res["Error Message"] = "Invalid or missing email address"
+                log_event(email, "FAILED", "Invalid or missing email address")
+                results.append(row_res)
                 continue
-            if not is_valid_email(email):
-                row["Error Message"] = "Invalid email address"
-                log_event(email, "FAILED", "Invalid email address")
-                results.append(row)
+
+            if not cert_path or not os.path.exists(cert_path):
+                row_res["Error Message"] = "Certificate PDF not found. Please generate in Tab 2."
+                log_event(email, "FAILED", "Certificate PDF not found")
+                results.append(row_res)
                 continue
+
             if sender is None:
-                row["Error Message"] = "SMTP connection unavailable"
-                results.append(row)
+                row_res["Error Message"] = "SMTP server unavailable"
+                results.append(row_res)
                 continue
 
-            personalized_body = body_template.replace("{{Name}}", name)
+            # Personalize subject & body
+            p_subj = _apply_email_placeholders(email_subj, name=name, course=course, cert_no=cert_no, date=date_val, mobile=mobile)
+            p_body = _apply_email_placeholders(email_body, name=name, course=course, cert_no=cert_no, date=date_val, mobile=mobile)
+
             try:
-                sender.send(email, subject, personalized_body, cert_path)
-                row["Email Sent"] = "Yes"
-                row["Sent Date & Time"] = now_str()
-                log_event(email, "SENT")
+                sender.send(email, p_subj, p_body, cert_path)
+                row_res["Email Sent"] = "Yes"
+                row_res["Sent Date & Time"] = now_str()
+                cert_store.mark_sent(cert_no)
+                log_event(email, "SENT", f"Cert: {cert_no}")
             except Exception as e:
-                row["Error Message"] = str(e)
+                row_res["Error Message"] = str(e)
+                cert_store.mark_send_failed(cert_no, str(e))
                 log_event(email, "FAILED", str(e))
 
-            results.append(row)
+            results.append(row_res)
 
         if sender is not None:
             sender.close()
@@ -661,400 +1075,107 @@ with tab3:
         st.session_state.results = results
         progress.empty()
 
+        # Save reports
         report_df = build_report_dataframe(results)
         report_df.to_excel(REPORT_PATH, index=False)
         errors_df = report_df[report_df["Error Message"] != ""]
-        errors_df.to_excel(ERROR_REPORT_PATH, index=False)
+        if not errors_df.empty:
+            errors_df.to_excel(ERROR_REPORT_PATH, index=False)
 
         n_sent = sum(1 for r in results if r["Email Sent"] == "Yes")
-        st.success(f"Done — {n_sent} of {total} emails sent successfully.")
+        st.success(f"✓ Bulk delivery finished! {n_sent} of {total_recs} emails delivered successfully.")
         st.rerun()
+
     card_end()
 
-# ---------------------------------------------------------------------------
-# TAB 4 — Report & Dashboard
-# ---------------------------------------------------------------------------
+
+# ===========================================================================
+# TAB 4 — Delivery Report & Analytics
+# ===========================================================================
 with tab4:
-    card_start("Dashboard")
+    card_start("Delivery Analytics & Executive KPIs", "Real-time metrics and audit summary across all participants.")
 
     records = st.session_state.records
-    cert_paths = st.session_state.cert_paths
+    cert_map = st.session_state.cert_paths
     results = st.session_state.results
 
     total = len(records)
-    certs_generated = sum(1 for v in cert_paths.values() if v)
+    certs_gen = sum(1 for v in cert_map.values() if v.get("Path") and os.path.exists(v.get("Path")))
     emails_sent = sum(1 for r in results if r.get("Email Sent") == "Yes")
-    emails_failed = sum(1 for r in results if r.get("Email Sent") == "No")
-    success_rate = f"{(emails_sent / total * 100):.1f}%" if total else "0.0%"
+    emails_failed = sum(1 for r in results if r.get("Email Sent") == "No" and r.get("Error Message"))
+    success_rate = f"{(emails_sent / total * 100):.1f}%" if total > 0 else "0.0%"
 
-    d1, d2, d3, d4, d5 = st.columns(5)
-    d1.metric("Total Participants", total)
-    d2.metric("Certificates Generated", certs_generated)
-    d3.metric("Emails Sent", emails_sent)
-    d4.metric("Failed Emails", emails_failed)
-    d5.metric("Success Rate", success_rate)
+    k1, k2, k3, k4, k5 = st.columns(5)
+    k1.metric("Total Participants", total)
+    k2.metric("Certificates Ready", certs_gen)
+    k3.metric("Emails Delivered", emails_sent)
+    k4.metric("Failed Deliveries", emails_failed)
+    k5.metric("Success Rate", success_rate)
     card_end()
 
-    card_start("Downloads")
+    card_start("Actionable Download Center", "Download all certificate PDFs, detailed Excel audit reports, and execution logs.")
     dl1, dl2, dl3, dl4 = st.columns(4)
 
     with dl1:
-        if cert_paths and any(cert_paths.values()):
-            buf = io.BytesIO()
-            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-                for name, path in cert_paths.items():
-                    if path and os.path.exists(path):
-                        zf.write(path, arcname=os.path.basename(path))
-            st.download_button("⬇️ Certificates (.zip)", buf.getvalue(), file_name="Certificates.zip", mime="application/zip")
+        valid_paths = [info["Path"] for info in cert_map.values() if info.get("Path") and os.path.exists(info["Path"])]
+        if valid_paths:
+            zbuf = io.BytesIO()
+            with zipfile.ZipFile(zbuf, "w", zipfile.ZIP_DEFLATED) as zf:
+                for p in valid_paths:
+                    zf.write(p, arcname=os.path.basename(p))
+            st.download_button("⬇️ Certificates (.zip)", zbuf.getvalue(), file_name="Certificates.zip", mime="application/zip", use_container_width=True)
         else:
-            st.button("⬇️ Certificates (.zip)", disabled=True)
+            st.button("⬇️ Certificates (.zip)", disabled=True, use_container_width=True)
 
     with dl2:
         if os.path.exists(REPORT_PATH):
             with open(REPORT_PATH, "rb") as f:
-                st.download_button("⬇️ Email Report", f.read(), file_name="Email_Sending_Report.xlsx",
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button("⬇️ Email Report (.xlsx)", f.read(), file_name="Email_Sending_Report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
         else:
-            st.button("⬇️ Email Report", disabled=True)
+            st.button("⬇️ Email Report (.xlsx)", disabled=True, use_container_width=True)
 
     with dl3:
         if os.path.exists(ERROR_REPORT_PATH):
             with open(ERROR_REPORT_PATH, "rb") as f:
-                st.download_button("⬇️ Error Report", f.read(), file_name="Error_Report.xlsx",
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button("⬇️ Error Report (.xlsx)", f.read(), file_name="Error_Report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
         else:
-            st.button("⬇️ Error Report", disabled=True)
+            st.button("⬇️ Error Report (.xlsx)", disabled=True, use_container_width=True)
 
     with dl4:
         if os.path.exists(LOG_PATH):
             with open(LOG_PATH, "rb") as f:
-                st.download_button("⬇️ Log File", f.read(), file_name="email_log.txt")
+                st.download_button("⬇️ Event Logs (.txt)", f.read(), file_name="email_log.txt", mime="text/plain", use_container_width=True)
         else:
-            st.button("⬇️ Log File", disabled=True)
+            st.button("⬇️ Event Logs (.txt)", disabled=True, use_container_width=True)
+
     card_end()
+
+    card_start("Full Delivery Audit Report", "Interactive searchable log of all participant certificate and email events.")
 
     if results:
-        card_start("Full report")
-        st.dataframe(build_report_dataframe(results), use_container_width=True, height=320)
-        card_end()
+        full_df = build_report_dataframe(results)
+        f_col1, f_col2 = st.columns([1, 2])
+        with f_col1:
+            status_filter = st.selectbox("Filter by Status", ["All Records", "Sent Successfully", "Failed Deliveries"])
+        with f_col2:
+            search_query = st.text_input("🔍 Search by Name, Email, or Cert Number", "")
 
-# ---------------------------------------------------------------------------
-# TAB 5 — Sheet-driven Certificate + QR Verification + Email
-# ---------------------------------------------------------------------------
-def _apply_placeholders(template_text: str, *, student_name, course_name, certificate_number, issue_date) -> str:
-    return (
-        template_text.replace("{{student_name}}", student_name)
-        .replace("{{course_name}}", course_name)
-        .replace("{{certificate_number}}", certificate_number)
-        .replace("{{issue_date}}", issue_date)
-    )
+        filtered_df = full_df.copy()
+        if status_filter == "Sent Successfully":
+            filtered_df = filtered_df[filtered_df["Email Sent"] == "Yes"]
+        elif status_filter == "Failed Deliveries":
+            filtered_df = filtered_df[filtered_df["Email Sent"] == "No"]
 
+        if search_query.strip():
+            q = search_query.strip().lower()
+            filtered_df = filtered_df[
+                filtered_df["Name"].str.lower().str.contains(q)
+                | filtered_df["Email ID"].str.lower().str.contains(q)
+                | filtered_df["Certificate Number"].str.lower().str.contains(q)
+            ]
 
-with tab5:
-    sheet_write_enabled = sheets_writer.is_configured()
+        st.dataframe(filtered_df, use_container_width=True, height=300)
+    else:
+        st.info("No email sending activity logged in this session yet. Results will appear here once you dispatch emails in Tab ③.")
 
-    card_start(
-        "Connect Google Sheet",
-        (
-            "Service account configured — Certificate Status, Certificate Number, Generated Date, "
-            "Email Status, and Email Sent Date will be written back to this sheet automatically."
-            if sheet_write_enabled
-            else "Read-only access right now (no service account configured) — the sheet must be shared as "
-            "\u201cAnyone with the link \u2014 Viewer\u201d, and status changes won't be written back automatically "
-            "(use the CSV export below, or set GOOGLE_SERVICE_ACCOUNT_JSON to enable auto-write-back). "
-            "Certificate numbers are always tracked locally in data/certificates.db regardless."
-        ),
-    )
-    sheet_url = st.text_input("Google Sheet URL or ID", value=get_secret("DEFAULT_SHEET_URL", "https://docs.google.com/spreadsheets/d/1vTrLQiIvB6fMTUgsQtuJcnFR-Z3VVY_ALTRKF2dH0Jw/edit?usp=sharing"))
-    worksheet_name = st.text_input("Worksheet/tab name (optional)", value="")
-    colf1, colf2 = st.columns([1, 3])
-    with colf1:
-        fetch_clicked = st.button("🔄 Fetch roster")
-    if fetch_clicked:
-        try:
-            st.session_state.sheet_roster = sheets_readonly.get_roster(
-                sheet_url, worksheet_name=worksheet_name or None
-            )
-            st.session_state.sheet_error = None
-        except sheets_readonly.SheetAccessError as e:
-            st.session_state.sheet_roster = []
-            st.session_state.sheet_error = str(e)
-
-    if st.session_state.sheet_error:
-        st.error(st.session_state.sheet_error)
-    elif st.session_state.sheet_roster:
-        st.markdown(
-            f'<span class="dv-badge dv-badge-ok">✓ {len(st.session_state.sheet_roster)} rows loaded</span>',
-            unsafe_allow_html=True,
-        )
     card_end()
-
-    card_start(
-        "Certificate numbering",
-        "Format: INSTITUTE-COURSE-YEAR-###### (e.g. DVA-APIDS-2026-000123). "
-        "Once issued to a student, the same number is reused on every regenerate/resend.",
-    )
-    ncol1, ncol2, ncol3 = st.columns(3)
-    with ncol1:
-        institute_code = st.text_input("Institute code", value=os.environ.get("CERT_INSTITUTE_CODE", "DVA"))
-    with ncol2:
-        course_code_display = st.text_input(
-            "Course code (auto-follows the course selected below)",
-            value=os.environ.get("CERT_COURSE_CODE", "APIDS"),
-            disabled=True,
-            key="course_code_display",
-        )
-    with ncol3:
-        cert_year = st.text_input("Year", value=os.environ.get("CERT_YEAR", now_str()[:4]))
-    base_url = st.text_input(
-        "CERTIFICATE_VERIFICATION_BASE_URL",
-        value=os.environ.get("CERTIFICATE_VERIFICATION_BASE_URL", "http://localhost:8000"),
-        help="QR codes point to {this}/verify/{certificate_number}. Change the env var for production — no code change needed.",
-    )
-    card_end()
-
-    if st.session_state.sheet_roster:
-        roster = st.session_state.sheet_roster
-
-        card_start("Select Course & Students")
-
-        # Only the two real, distinct certificate designs currently on file.
-        # Add a new .pptx under assets/templates/ named certificate_<CODE>_blank.pptx
-        # and add "<CODE>" here to support another course later.
-        course_options = ["APIDS", "APDA"]
-        selected_course = st.selectbox("Select Course / Template", course_options, index=0)
-        # Keep the numbering "course code" locked to whichever template is selected,
-        # so the certificate's printed course and its number prefix can never drift apart.
-        course_code = selected_course
-
-        # -------------------------------------------------------------
-        # Mini dashboard for this pipeline (Total / Generated / Sent / Pending)
-        # -------------------------------------------------------------
-        total_students = len(roster)
-        generated_count = sum(1 for r in roster if cert_store.get_by_student(r.email, selected_course))
-        sent_count = sum(
-            1
-            for r in roster
-            if (rec := cert_store.get_by_student(r.email, selected_course)) and rec.send_count > 0
-        )
-        pending_count = total_students - sent_count
-
-        d1, d2, d3, d4 = st.columns(4)
-        d1.metric("Total Students", total_students)
-        d2.metric(f"Certificates Generated ({selected_course})", generated_count)
-        d3.metric(f"Certificates Sent ({selected_course})", sent_count)
-        d4.metric("Pending", max(pending_count, 0))
-
-        options = {f"{r.name} - {r.email}": r for r in roster}
-
-        def _status_tag(row) -> str:
-            rec = cert_store.get_by_student(row.email, selected_course)
-            if rec and rec.send_count > 0:
-                return " ✅ sent"
-            if rec:
-                return " 📄 generated"
-            return ""
-
-        labeled_options = {f"{label}{_status_tag(row)}": row for label, row in options.items()}
-        selected_labels = st.multiselect("Students", list(labeled_options.keys()), default=[])
-        select_all = st.checkbox("Select all fetched rows")
-        if select_all:
-            selected_labels = list(labeled_options.keys())
-
-        preview_col, send_col = st.columns([1, 1])
-        selected_rows = [labeled_options[l] for l in selected_labels]
-
-        # Surface duplicates before anything is generated, per "don't silently
-        # regenerate" — existing certs are reused, never overwritten, but the
-        # admin should see that up front rather than discover it after clicking.
-        already_issued = [r for r in selected_rows if cert_store.get_by_student(r.email, selected_course)]
-        if already_issued:
-            st.info(
-                f"{len(already_issued)} of the selected student(s) already have a certificate for "
-                f"{selected_course} — clicking Preview/Send will reuse their existing certificate "
-                "number and PDF rather than issuing a new one."
-            )
-
-        def _build_one(row) -> tuple[str, str, bool]:
-            """Returns (cert_number, pdf_path, was_new)."""
-            was_new = cert_store.get_by_student(row.email, selected_course) is None
-            record = cert_store.issue_or_get_certificate_number(
-                name=row.name,
-                email=row.email,
-                course=selected_course,
-                completion_date=row.completion_date or now_str(),
-                institute_code=institute_code.strip(),
-                course_code=course_code.strip(),
-                year=cert_year.strip(),
-                existing_number=row.existing_certificate_number,
-            )
-
-            verify_url = qr_utils.verification_url(record.cert_number, base_url=base_url)
-            qr_bytes = qr_utils.make_qr_image_bytes(verify_url)
-            qr_path = os.path.join(CERT_DIR, f"qr_{record.cert_number}.png")
-            with open(qr_path, "wb") as f:
-                f.write(qr_bytes)
-
-            pdf_path = os.path.join(CERT_DIR, f"{record.cert_number}.pdf")
-            template_path = os.path.join("assets", "templates", f"certificate_{selected_course}_blank.pptx")
-
-            pptx_certificate.render_certificate_pdf(
-                name=record.name,
-                certificate_number=record.cert_number,
-                completion_date=record.completion_date or now_str(),
-                qr_png_path=qr_path,
-                template_path=template_path,
-                output_pdf_path=pdf_path,
-            )
-
-            if was_new and sheet_write_enabled:
-                try:
-                    sheets_writer.update_student_status(
-                        sheet_url,
-                        email=row.email,
-                        worksheet_name=worksheet_name or None,
-                        certificate_number=record.cert_number,
-                        certificate_status="GENERATED",
-                        generated_date=now_str(),
-                        verification_url=verify_url,
-                    )
-                except sheets_writer.SheetWriteError as e:
-                    st.warning(f"Certificate generated, but the sheet wasn't updated: {e}")
-
-            return record.cert_number, pdf_path, was_new
-
-        with preview_col:
-            if st.button("👁️ Preview first selected", disabled=not selected_rows):
-                try:
-                    cert_number, pdf_path, was_new = _build_one(selected_rows[0])
-                    st.caption(("New certificate: " if was_new else "Existing certificate reused: ") + cert_number)
-                    with open(pdf_path, "rb") as f:
-                        st.download_button(
-                            f"⬇️ Preview: {cert_number}.pdf", f.read(), file_name=f"{cert_number}.pdf", mime="application/pdf"
-                        )
-                except pptx_certificate.TemplateFieldNotFound as e:
-                    st.error(str(e))
-                except Exception as e:
-                    st.error(f"Could not build preview: {e}")
-
-        with send_col:
-            smtp_ready = SMTPConfig().is_configured()
-            send_disabled = not selected_rows or not smtp_ready
-            send_clicked = st.button(
-                f"📧 Send certificate to {len(selected_rows)} student(s)",
-                disabled=send_disabled,
-                help=None if smtp_ready else "Configure SMTP_EMAIL / SMTP_PASSWORD first (see sidebar).",
-            )
-        card_end()
-
-        # -------------------------------------------------------------
-        # Editable email composition — placeholders filled in per recipient
-        # -------------------------------------------------------------
-        card_start(
-            "Email composition",
-            "Editable subject/body. Placeholders {{student_name}}, {{course_name}}, {{certificate_number}}, "
-            "and {{issue_date}} are replaced automatically for each recipient before sending.",
-        )
-        email_subject_tpl = st.text_input("Subject", key="email_subject_tpl")
-        email_body_tpl = st.text_area("Body", height=180, key="email_body_tpl")
-        if selected_rows:
-            preview_row = selected_rows[0]
-            with st.expander("Preview for first selected student"):
-                st.text(
-                    "Subject: "
-                    + _apply_placeholders(
-                        email_subject_tpl,
-                        student_name=preview_row.name,
-                        course_name=selected_course,
-                        certificate_number=preview_row.existing_certificate_number or "(assigned on generate)",
-                        issue_date=preview_row.completion_date or now_str(),
-                    )
-                )
-                st.text(
-                    _apply_placeholders(
-                        email_body_tpl,
-                        student_name=preview_row.name,
-                        course_name=selected_course,
-                        certificate_number=preview_row.existing_certificate_number or "(assigned on generate)",
-                        issue_date=preview_row.completion_date or now_str(),
-                    )
-                )
-        card_end()
-
-        if send_clicked:
-            progress = st.progress(0.0, text="Starting…")
-            sent_ok, sent_fail = [], []
-            in_flight = st.session_state.sending_in_progress
-            with EmailSender() as sender:
-                for i, row in enumerate(selected_rows):
-                    key = cert_store.student_key(row.email, selected_course)
-                    if key in in_flight:
-                        continue  # guards against a double-click re-triggering this same batch
-                    in_flight.add(key)
-                    email_status, email_error = "SENT", None
-                    try:
-                        cert_number, pdf_path, _ = _build_one(row)
-                        issue_date = row.completion_date or now_str()
-                        subject = _apply_placeholders(
-                            email_subject_tpl,
-                            student_name=row.name,
-                            course_name=selected_course,
-                            certificate_number=cert_number,
-                            issue_date=issue_date,
-                        )
-                        body = _apply_placeholders(
-                            email_body_tpl,
-                            student_name=row.name,
-                            course_name=selected_course,
-                            certificate_number=cert_number,
-                            issue_date=issue_date,
-                        )
-                        sender.send(row.email, subject, body, attachment_path=pdf_path)
-                        cert_store.mark_sent(cert_number)
-                        sent_ok.append((row.name, cert_number))
-                    except Exception as e:
-                        email_status, email_error = "FAILED", str(e)
-                        sent_fail.append((row.name, str(e)))
-                    finally:
-                        if sheet_write_enabled:
-                            try:
-                                sheets_writer.update_student_status(
-                                    sheet_url,
-                                    email=row.email,
-                                    worksheet_name=worksheet_name or None,
-                                    email_status=email_status,
-                                    email_sent_date=now_str() if email_status == "SENT" else None,
-                                )
-                            except sheets_writer.SheetWriteError:
-                                pass  # already have this student's error surfaced via sent_fail/warning above
-                        in_flight.discard(key)
-                        progress.progress((i + 1) / len(selected_rows), text=f"{i + 1}/{len(selected_rows)}")
-
-            if sent_ok:
-                st.success(f"Sent {len(sent_ok)} certificate(s): " + ", ".join(f"{n} ({c})" for n, c in sent_ok))
-            if sent_fail:
-                st.error("Failed: " + "; ".join(f"{n}: {err}" for n, err in sent_fail))
-
-        card_start("Export certificate numbers", "Paste this back into your Google Sheet manually — only needed if write-back isn't configured above.")
-        if st.button("⬇️ Build export CSV of issued numbers"):
-            export_rows = []
-            for row in roster:
-                rec = cert_store.get_by_student(row.email, selected_course)
-                if rec:
-                    export_rows.append(
-                        {
-                            "Name": rec.name,
-                            "Email": rec.email,
-                            "Course": rec.course,
-                            "Certificate Number": rec.cert_number,
-                            "Certificate Status": rec.status,
-                            "Email Status": "SENT" if rec.send_count > 0 else "NOT SENT",
-                            "Email Sent Date": rec.last_sent_at or "",
-                        }
-                    )
-            if export_rows:
-                csv_bytes = pd.DataFrame(export_rows).to_csv(index=False).encode("utf-8")
-                st.download_button("⬇️ certificate_numbers.csv", csv_bytes, file_name="certificate_numbers.csv", mime="text/csv")
-            else:
-                st.info("No certificate numbers issued yet for the fetched roster.")
-        card_end()
