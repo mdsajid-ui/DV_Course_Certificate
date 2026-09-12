@@ -62,7 +62,66 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .security-seal strong { display:block; margin-bottom:3px; color:#1d4ed8; }
   .hash-box { font-family:monospace; font-size:0.72rem; color:#475569; word-break:break-all; background:#fff; padding:4px 8px; border-radius:4px; border:1px solid #cbd5e1; margin-top:4px; }
   .notice { font-size:0.75rem; color:#94a3b8; line-height:1.4; margin:0; }
+
+  /* Anti-screenshot blankout shield */
+  @media print {
+    * { display:none !important; }
+    html, body { background:#fff !important; visibility:hidden !important; }
+  }
+  .screenshot-blankout, .screenshot-blankout * {
+    visibility:hidden !important;
+    opacity:0 !important;
+    background:#fff !important;
+    color:transparent !important;
+    filter:blur(100px) !important;
+  }
 </style>
+<script>
+(function() {
+  function triggerBlankout() {
+    document.body.classList.add('screenshot-blankout');
+  }
+  function restoreView() {
+    setTimeout(function() {
+      document.body.classList.remove('screenshot-blankout');
+    }, 600);
+  }
+
+  // 1. Trigger blankout on window blur (Snipping Tool, screen grabbers, overlays)
+  window.addEventListener('blur', triggerBlankout);
+  window.addEventListener('focus', restoreView);
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) { triggerBlankout(); } else { restoreView(); }
+  });
+
+  // 2. Intercept PrintScreen and screenshot shortcuts
+  window.addEventListener('keyup', function(e) {
+    if (e.key === 'PrintScreen' || e.keyCode === 44 || e.code === 'PrintScreen') {
+      try { navigator.clipboard.writeText(''); } catch(err) {}
+      triggerBlankout();
+      setTimeout(restoreView, 2500);
+    }
+  });
+
+  window.addEventListener('keydown', function(e) {
+    if (e.key === 'PrintScreen' || e.keyCode === 44 || e.code === 'PrintScreen' ||
+        (e.ctrlKey && (e.key === 'p' || e.key === 'P' || e.key === 's' || e.key === 'S')) ||
+        (e.ctrlKey && e.shiftKey && (e.key === 's' || e.key === 'S' || e.key === 'i' || e.key === 'I')) ||
+        (e.metaKey && e.shiftKey && (e.key === '3' || e.key === '4' || e.key === 's' || e.key === 'S'))) {
+      try { navigator.clipboard.writeText(''); } catch(err) {}
+      triggerBlankout();
+      setTimeout(restoreView, 2500);
+      e.preventDefault();
+      return false;
+    }
+  });
+
+  document.addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+    return false;
+  });
+})();
+</script>
 </head>
 <body>
   <div class="card">

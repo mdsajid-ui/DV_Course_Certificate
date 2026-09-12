@@ -319,7 +319,101 @@ st.markdown(
         }}
         section[data-testid="stSidebar"] * {{ color: #EAF0FF !important; }}
         section[data-testid="stSidebar"] hr {{ border-color: rgba(255,255,255,.12) !important; }}
+
+        /* ---------- Anti-Screenshot & Screen Capture Protection Shield ---------- */
+        @media print {{
+            * {{ display: none !important; }}
+            html, body {{ background: #ffffff !important; visibility: hidden !important; }}
+        }}
+        .screenshot-blankout, .screenshot-blankout * {{
+            visibility: hidden !important;
+            opacity: 0 !important;
+            background: #ffffff !important;
+            color: transparent !important;
+            filter: blur(100px) !important;
+        }}
+        .protected-cert-container {{
+            position: relative;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            -webkit-touch-callout: none;
+        }}
+        .protected-cert-container img, [data-testid="stImage"] img {{
+            pointer-events: none !important;
+            -webkit-user-drag: none !important;
+            user-select: none !important;
+        }}
     </style>
+
+    <script>
+    (function() {{
+        if (window.__dv_security_initialized) return;
+        window.__dv_security_initialized = true;
+
+        function triggerBlankout() {{
+            document.body.classList.add('screenshot-blankout');
+            if (window.parent && window.parent.document && window.parent.document.body) {{
+                window.parent.document.body.classList.add('screenshot-blankout');
+            }}
+        }}
+
+        function restoreView() {{
+            setTimeout(function() {{
+                document.body.classList.remove('screenshot-blankout');
+                if (window.parent && window.parent.document && window.parent.document.body) {{
+                    window.parent.document.body.classList.remove('screenshot-blankout');
+                }}
+            }}, 600);
+        }}
+
+        // 1. Detect focus loss (triggered when Snipping Tool, screen grabber, or capture overlay opens)
+        window.addEventListener('blur', triggerBlankout);
+        window.addEventListener('focus', restoreView);
+        document.addEventListener('visibilitychange', function() {{
+            if (document.hidden) {{
+                triggerBlankout();
+            }} else {{
+                restoreView();
+            }}
+        }});
+
+        // 2. Intercept PrintScreen and screenshot shortcuts
+        window.addEventListener('keyup', function(e) {{
+            if (e.key === 'PrintScreen' || e.keyCode === 44 || e.code === 'PrintScreen') {{
+                try {{
+                    navigator.clipboard.writeText('');
+                }} catch(err) {{}}
+                triggerBlankout();
+                setTimeout(restoreView, 2500);
+            }}
+        }});
+
+        window.addEventListener('keydown', function(e) {{
+            if (e.key === 'PrintScreen' || e.keyCode === 44 || e.code === 'PrintScreen' ||
+                (e.ctrlKey && (e.key === 'p' || e.key === 'P' || e.key === 's' || e.key === 'S')) ||
+                (e.ctrlKey && e.shiftKey && (e.key === 's' || e.key === 'S' || e.key === 'i' || e.key === 'I')) ||
+                (e.metaKey && e.shiftKey && (e.key === '3' || e.key === '4' || e.key === 's' || e.key === 'S'))) {{
+                try {{
+                    navigator.clipboard.writeText('');
+                }} catch(err) {{}}
+                triggerBlankout();
+                setTimeout(restoreView, 2500);
+                e.preventDefault();
+                return false;
+            }}
+        }});
+
+        // 3. Disable right-click saving on protected images
+        document.addEventListener('contextmenu', function(e) {{
+            if (e.target.tagName === 'IMG' || e.target.closest('[data-testid="stImage"]')) {{
+                e.preventDefault();
+                return false;
+            }}
+        }});
+    }})();
+    </script>
 
     <div class="dv-hero">
         <div class="dv-hero-left">
@@ -723,20 +817,31 @@ with tab1:
     card_end()
 
     # ------------------ Template Selection ------------------
-    card_start("2. Certificate Template & Design", "Select the official DV Analytics course template or upload a custom template.")
+    card_start("2. Certificate Template (Auto-Loaded & Ready)", "The official DV Analytics certificate template is pre-configured and automatically loaded. You do not need to re-upload templates.")
 
     tpl_mode = st.radio(
-        "Certificate Template Type",
-        ["🎓 Official DV Analytics Templates (APIDS / APDA)", "🎨 Custom Template (PNG / JPG / PDF)"],
+        "Certificate Template Mode",
+        ["🎓 Official Built-in Template (Auto-Loaded · Zero Uploads Needed)", "🎨 Upload Custom Template (Optional)"],
         horizontal=True,
     )
     st.session_state.template_mode = "Official APIDS / APDA Template" if "Official" in tpl_mode else "Custom Template"
 
     if st.session_state.template_mode == "Official APIDS / APDA Template":
+        st.markdown(
+            """
+            <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:12px; padding:12px 16px; margin-bottom:14px; font-size:13px; color:#166534;">
+                <strong>✅ Template Automatically Active:</strong>
+                The official DV Analytics Certificate template is already loaded into your system. You <strong>never need to upload it again</strong>.
+                Participant names, registration numbers, dates, and verification QR codes will be rendered automatically.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         col_t1, col_t2 = st.columns(2)
         with col_t1:
             st.session_state.selected_official_course = st.selectbox(
-                "Select Official Course Template",
+                "Course Template",
                 ["APIDS", "APDA"],
                 index=0 if st.session_state.selected_official_course == "APIDS" else 1,
                 help="APIDS = Advanced Program in Data Science, APDA = Advanced Program in Data Analytics",
@@ -750,10 +855,9 @@ with tab1:
                 help="QR codes point to {this}/verify/{cert_number}",
             )
 
-        st.info(
-            f"ℹ️ **Selected Template:** `certificate_{st.session_state.selected_official_course}_blank.pptx`\n\n"
-            f"• Features: Crisp vector typography, automatic Certificate Numbering (`{st.session_state.institute_code}-{st.session_state.selected_official_course}-{st.session_state.cert_year}-000001`), "
-            f"Date stamping, and high-precision **Scan to Verify QR Code**."
+        st.caption(
+            f"Active Template File: `assets/templates/certificate_{st.session_state.selected_official_course}_blank.pptx` · "
+            f"Automatic Numbering Format: `{st.session_state.institute_code}-{st.session_state.selected_official_course}-{st.session_state.cert_year}-000001`"
         )
 
     else:
