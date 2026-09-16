@@ -9,6 +9,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 from pptx import Presentation
 
+import shutil
+
 import pptx_certificate as pc
 import qr_utils
 
@@ -40,6 +42,7 @@ def test_fill_certificate_text_raises_on_missing_template_field(tmp_path):
         pc.fill_certificate_text(prs, name="X", certificate_number="Y", completion_date="Z")
 
 
+@pytest.mark.skipif(shutil.which("soffice") is None, reason="LibreOffice ('soffice') is required on PATH")
 def test_render_certificate_pdf_end_to_end(tmp_path):
     qr_path = tmp_path / "qr.png"
     qr_path.write_bytes(qr_utils.make_qr_image_bytes("https://example.com/verify/DVA-APIDS-2026-000999"))

@@ -717,13 +717,23 @@ OFFICIAL_EMAIL_TEMPLATES = {
 # ---------------------------------------------------------------------------
 # Helper Functions
 # ---------------------------------------------------------------------------
-def _apply_email_placeholders(tpl: str, *, name: str, course: str, cert_no: str, date: str, mobile: str = "") -> str:
+def _apply_email_placeholders(
+    tpl: str,
+    *,
+    name: str,
+    course: str,
+    cert_no: str,
+    date: str,
+    mobile: str = "",
+    download_url: str = "",
+) -> str:
     res = tpl
     res = re.sub(r"\{\{\s*(?:student_)?name\s*\}\}", name, res, flags=re.IGNORECASE)
     res = re.sub(r"\{\{\s*(?:course|course_name)\s*\}\}", course, res, flags=re.IGNORECASE)
     res = re.sub(r"\{\{\s*(?:certno|certificate_number|cert_no|reg_no)\s*\}\}", cert_no, res, flags=re.IGNORECASE)
     res = re.sub(r"\{\{\s*(?:date|issue_date|completion_date)\s*\}\}", date, res, flags=re.IGNORECASE)
     res = re.sub(r"\{\{\s*(?:mobile|phone|mobile_number)\s*\}\}", mobile, res, flags=re.IGNORECASE)
+    res = re.sub(r"\{\{\s*(?:download_link|download_url|certificate_link)\s*\}\}", download_url, res, flags=re.IGNORECASE)
     return res
 
 
@@ -734,17 +744,37 @@ def get_course_email_content(
     cert_no: str,
     date: str,
     mobile: str = "",
+    email: str = "",
+    student_id: str = "",
+    download_url: str = "",
     custom_subject: Optional[str] = None,
     custom_body: Optional[str] = None,
     use_custom: bool = False,
 ) -> tuple[str, str]:
     """
     Automatically selects and personalizes the exact official email template
-    based on whether the student is enrolled in APIDS or APDA.
+    based on whether the student is enrolled in APIDS or APDA, embedding
+    the secure S3 download link for the student.
     """
+    if not download_url and cert_no and email:
+        try:
+            import s3_service
+            s3_st = s3_service.get_s3_storage()
+            token = s3_st.generate_student_access_token(
+                cert_number=cert_no,
+                student_id=student_id or email.split("@")[0],
+                email=email,
+            )
+            base_dl = get_secret("CERTIFICATE_DOWNLOAD_BASE_URL", "http://localhost:8000").rstrip("/")
+            download_url = f"{base_dl}/download?token={token}"
+        except Exception:
+            download_url = ""
+
     if use_custom and custom_subject and custom_body:
-        subj = _apply_email_placeholders(custom_subject, name=name, course=course, cert_no=cert_no, date=date, mobile=mobile)
-        body = _apply_email_placeholders(custom_body, name=name, course=course, cert_no=cert_no, date=date, mobile=mobile)
+        subj = _apply_email_placeholders(custom_subject, name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url)
+        body = _apply_email_placeholders(custom_body, name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url)
+        if download_url and download_url not in body:
+            body += f"\n\n🔗 Download Certificate Link:\n{download_url}"
         return subj, body
 
     c_upper = (course or "APIDS").upper()
@@ -753,8 +783,14 @@ def get_course_email_content(
     else:
         tpl = OFFICIAL_EMAIL_TEMPLATES["APIDS"]
 
-    subj = _apply_email_placeholders(tpl["subject"], name=name, course=course, cert_no=cert_no, date=date, mobile=mobile)
-    body = _apply_email_placeholders(tpl["body"], name=name, course=course, cert_no=cert_no, date=date, mobile=mobile)
+    subj = _apply_email_placeholders(tpl["subject"], name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url)
+    body = _apply_email_placeholders(tpl["body"], name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url)
+    if download_url and download_url not in body:
+        body += (
+            f"\n\n🔗 Official Certificate Download Portal (Private S3):\n"
+            f"{download_url}\n"
+            f"(Use this secure link to download your high-resolution vector PDF at any time)"
+        )
     return subj, body
 
 
@@ -768,6 +804,13 @@ def build_participant_cert(rec: dict, template_mode: str, default_course: str) -
     course = rec.get("Course") or default_course
     completion_date = rec.get("Completion Date") or datetime.now().strftime("%d-%b-%Y")
     existing_cert_no = rec.get("Certificate Number")
+    student_id = (
+        rec.get("Student ID")
+        or rec.get("StudentID")
+        or rec.get("Roll No")
+        or rec.get("Candidate ID")
+        or (email.split("@")[0] if email else "STU")
+    )
 
     # Issue or retrieve authoritative number (e.g. 202505DVA2075)
     batch_pfx = st.session_state.get("cert_batch_prefix", "202505").strip() or "202505"
@@ -786,6 +829,7 @@ def build_participant_cert(rec: dict, template_mode: str, default_course: str) -
         start_seq=start_num,
         format_style="COMPACT",
         existing_number=existing_cert_no,
+        student_id=str(student_id),
     )
     cert_number = cert_record.cert_number
 
@@ -855,6 +899,28 @@ def build_participant_cert(rec: dict, template_mode: str, default_course: str) -
         shutil.copyfile(pdf_path, vault_path)
     except Exception:
         pass
+
+    # Secure Amazon S3 Upload (Private Storage: certificates/{year}/{student_id}/certificate.pdf)
+    s3_key = ""
+    try:
+        import s3_service
+        s3_storage = s3_service.get_s3_storage()
+        if s3_storage.is_configured():
+            year_val = st.session_state.get("cert_year", "2026") or "2026"
+            s3_key = s3_storage.upload_certificate_pdf(
+                local_pdf_path=pdf_path,
+                year=str(year_val),
+                student_id=str(student_id),
+                filename="certificate.pdf",
+            )
+            cert_store.update_s3_metadata(
+                cert_number=cert_number,
+                s3_key=s3_key,
+                s3_bucket=s3_storage.bucket,
+                student_id=str(student_id),
+            )
+    except Exception as s3_err:
+        log_event(email, "S3_UPLOAD_WARN", str(s3_err))
 
     # Automatically sync public verification registry for GitHub Pages
     try:
@@ -1692,13 +1758,22 @@ with tab3:
                 results.append(row_res)
                 continue
 
-            # Automatically select and personalize official course email
+            # Automatically select and personalize official course email with secure S3 download link
+            student_id_val = (
+                rec.get("Student ID")
+                or rec.get("StudentID")
+                or rec.get("Roll No")
+                or rec.get("Candidate ID")
+                or (email.split("@")[0] if email else "STU")
+            )
             p_subj, p_body = get_course_email_content(
                 course,
                 name=name,
                 cert_no=cert_no,
                 date=date_val,
                 mobile=mobile,
+                email=email,
+                student_id=str(student_id_val),
                 custom_subject=st.session_state.get("email_subject_tpl"),
                 custom_body=st.session_state.get("email_body_tpl"),
                 use_custom=(st.session_state.get("email_composer_mode") == "✏️ Custom Template Editor"),
@@ -1885,6 +1960,8 @@ with tab4:
                                         name=rec.name,
                                         cert_no=rec.cert_number,
                                         date=rec.completion_date or datetime.now().strftime("%d-%b-%Y"),
+                                        email=rec.email,
+                                        student_id=rec.student_id or "",
                                     )
                                     sender.send(rec.email, p_subj, p_body, pdf_path)
                                     sender.close()
@@ -1908,6 +1985,7 @@ with tab4:
                 "Course": r.course,
                 "Completion Date": r.completion_date,
                 "Issued Date": r.created_at[:10] if r.created_at else "",
+                "S3 Storage": f"☁️ {r.s3_key}" if r.s3_key else "Local Only",
                 "Send Status": r.email_status,
                 "Security Seal": f"🔒 {r.pdf_hash[:10]}..." if r.pdf_hash else "🔒 AES-256",
             }

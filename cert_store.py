@@ -102,6 +102,15 @@ def init_db() -> None:
             conn.execute("ALTER TABLE certificates ADD COLUMN is_locked INTEGER NOT NULL DEFAULT 1")
         if "security_level" not in existing_cols:
             conn.execute("ALTER TABLE certificates ADD COLUMN security_level TEXT NOT NULL DEFAULT 'AES-256-READONLY'")
+        if "student_id" not in existing_cols:
+            conn.execute("ALTER TABLE certificates ADD COLUMN student_id TEXT")
+        if "s3_key" not in existing_cols:
+            conn.execute("ALTER TABLE certificates ADD COLUMN s3_key TEXT")
+        if "s3_bucket" not in existing_cols:
+            conn.execute("ALTER TABLE certificates ADD COLUMN s3_bucket TEXT")
+
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_student_id ON certificates(student_id);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_s3_key ON certificates(s3_key);")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS counters (
@@ -153,6 +162,9 @@ class CertificateRecord:
     pdf_hash: Optional[str] = None
     is_locked: int = 1
     security_level: str = "AES-256-READONLY"
+    student_id: Optional[str] = None
+    s3_key: Optional[str] = None
+    s3_bucket: Optional[str] = None
 
 
 def _row_to_record(row: sqlite3.Row) -> CertificateRecord:
@@ -173,6 +185,9 @@ def _row_to_record(row: sqlite3.Row) -> CertificateRecord:
         pdf_hash=row["pdf_hash"] if "pdf_hash" in keys else None,
         is_locked=row["is_locked"] if "is_locked" in keys else 1,
         security_level=row["security_level"] if "security_level" in keys else "AES-256-READONLY",
+        student_id=row["student_id"] if "student_id" in keys else None,
+        s3_key=row["s3_key"] if "s3_key" in keys else None,
+        s3_bucket=row["s3_bucket"] if "s3_bucket" in keys else None,
     )
 
 
@@ -187,6 +202,62 @@ def store_pdf_security_hash(cert_number: str, pdf_hash: str) -> None:
             """,
             (str(pdf_hash), cert_number.strip()),
         )
+
+
+def update_s3_metadata(
+    cert_number: str,
+    s3_key: str,
+    s3_bucket: str,
+    student_id: Optional[str] = None,
+) -> None:
+    """Records S3 object key, bucket, and optional student ID for an issued certificate."""
+    with _lock, _connect() as conn:
+        if student_id:
+            conn.execute(
+                """
+                UPDATE certificates
+                   SET s3_key = ?, s3_bucket = ?, student_id = COALESCE(student_id, ?)
+                 WHERE cert_number = ?
+                """,
+                (s3_key.strip(), s3_bucket.strip(), student_id.strip(), cert_number.strip()),
+            )
+        else:
+            conn.execute(
+                """
+                UPDATE certificates
+                   SET s3_key = ?, s3_bucket = ?
+                 WHERE cert_number = ?
+                """,
+                (s3_key.strip(), s3_bucket.strip(), cert_number.strip()),
+            )
+
+
+def verify_student_authorization(
+    cert_number: str,
+    student_id: Optional[str] = None,
+    email: Optional[str] = None,
+) -> bool:
+    """
+    Strict authorization check: verifies whether the provided student_id or email
+    matches the owner of the given certificate.
+    Prevents student A from viewing or downloading student B's certificate.
+    """
+    rec = get_by_cert_number(cert_number)
+    if rec is None or rec.status != "VALID":
+        return False
+
+    matches = False
+    if email and str(email).strip().lower() == str(rec.email).strip().lower():
+        matches = True
+    if student_id and rec.student_id and str(student_id).strip().lower() == str(rec.student_id).strip().lower():
+        matches = True
+    # If student_id was not set explicitly, allow checking against email username prefix
+    if student_id and not rec.student_id:
+        email_prefix = rec.email.split("@")[0].lower()
+        if str(student_id).strip().lower() == email_prefix:
+            matches = True
+
+    return matches
 
 
 def get_by_student(email: str, course: str) -> Optional[CertificateRecord]:
@@ -257,6 +328,9 @@ def issue_or_get_certificate_number(
     start_seq: int = 2075,
     format_style: str = "COMPACT",
     existing_number: Optional[str] = None,
+    student_id: Optional[str] = None,
+    s3_key: Optional[str] = None,
+    s3_bucket: Optional[str] = None,
 ) -> CertificateRecord:
     """
     Idempotent: if this (email, course) already has a certificate number,
@@ -268,6 +342,18 @@ def issue_or_get_certificate_number(
     with _lock, _connect() as conn:
         row = conn.execute("SELECT * FROM certificates WHERE student_key = ?", (key,)).fetchone()
         if row:
+            if (student_id and not row["student_id"]) or (s3_key and not row["s3_key"]):
+                conn.execute(
+                    """
+                    UPDATE certificates
+                       SET student_id = COALESCE(student_id, ?),
+                           s3_key = COALESCE(s3_key, ?),
+                           s3_bucket = COALESCE(s3_bucket, ?)
+                     WHERE student_key = ?
+                    """,
+                    (student_id, s3_key, s3_bucket, key),
+                )
+                row = conn.execute("SELECT * FROM certificates WHERE student_key = ?", (key,)).fetchone()
             return _row_to_record(row)
 
         if format_style == "LEGACY":
@@ -291,10 +377,10 @@ def issue_or_get_certificate_number(
             """
             INSERT INTO certificates
                 (student_key, cert_number, name, email, course, completion_date,
-                 status, created_at, last_sent_at, send_count)
-            VALUES (?, ?, ?, ?, ?, ?, 'VALID', ?, NULL, 0)
+                 status, created_at, last_sent_at, send_count, student_id, s3_key, s3_bucket)
+            VALUES (?, ?, ?, ?, ?, ?, 'VALID', ?, NULL, 0, ?, ?, ?)
             """,
-            (key, cert_number, name, email, course, completion_date, now),
+            (key, cert_number, name, email, course, completion_date, now, student_id, s3_key, s3_bucket),
         )
         row = conn.execute("SELECT * FROM certificates WHERE student_key = ?", (key,)).fetchone()
         return _row_to_record(row)

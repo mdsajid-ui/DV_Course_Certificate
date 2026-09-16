@@ -7,8 +7,11 @@ Shared helpers: Excel validation, logging setup, and report building.
 import logging
 import os
 from datetime import datetime
+from dotenv import load_dotenv
 
 import pandas as pd
+
+load_dotenv()
 
 REQUIRED_COLUMNS = ["Name", "Mobile Number", "Email ID"]
 
