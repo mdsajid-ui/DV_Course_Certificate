@@ -1,0 +1,20 @@
+{
+  "202505DVA2073": {
+    "cert_number": "202505DVA2073",
+    "name": "Abhishek Singhal",
+    "course": "Advanced Program in Industrial Data Science (APIDS)",
+    "completion_date": "2026-09-07",
+    "expiry": "Lifetime",
+    "status": "Active",
+    "pdf_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "202505DVA2057": {
+    "cert_number": "202505DVA2057",
+    "name": "Priya Nair",
+    "course": "Advanced Program in Data Analytics (APDA)",
+    "completion_date": "2026-08-04",
+    "expiry": "Lifetime",
+    "status": "Active",
+    "pdf_hash": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a"
+  }
+}

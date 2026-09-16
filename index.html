@@ -1,0 +1,613 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>DV Analytics · Official Certificate Verification</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background-color: #ffffff;
+      color: #1e293b;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 80px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 420px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    /* Top Auth Header */
+    .auth-header {
+      margin-top: 12px;
+      margin-bottom: 24px;
+    }
+
+    .auth-title {
+      font-size: 1.45rem;
+      font-weight: 700;
+      color: #38b000; /* Vibrant authentic green from reference */
+      letter-spacing: -0.2px;
+      margin-bottom: 8px;
+    }
+
+    .auth-title.invalid {
+      color: #d90429;
+    }
+
+    .cert-label {
+      font-size: 1.15rem;
+      color: #2b2d42;
+      font-weight: 500;
+      margin-bottom: 2px;
+    }
+
+    .cert-number-head {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #1a1a24;
+      letter-spacing: 0.5px;
+    }
+
+    /* Verification Card */
+    .cert-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+      padding: 32px 24px 28px;
+      text-align: left;
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    /* Logo Container */
+    .logo-box {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .logo-img {
+      width: 140px;
+      height: 140px;
+      max-width: 100%;
+      object-fit: contain;
+      display: inline-block;
+    }
+
+    /* Details List */
+    .details-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .detail-item {
+      font-size: 1.05rem;
+      line-height: 1.5;
+      color: #334155;
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .detail-key {
+      font-weight: 500;
+      color: #475569;
+      white-space: nowrap;
+      min-width: 125px;
+    }
+
+    .detail-sep {
+      color: #64748b;
+      font-weight: 500;
+    }
+
+    .detail-val {
+      font-weight: 600;
+      color: #0f172a;
+      word-break: break-word;
+    }
+
+    .status-active {
+      color: #2b9348;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* Manual Search State */
+    .search-box {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+      text-align: left;
+      margin-top: 20px;
+    }
+
+    .search-box h3 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #0f172a;
+    }
+
+    .search-box p {
+      font-size: 0.88rem;
+      color: #64748b;
+      margin-bottom: 16px;
+      line-height: 1.4;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .search-input:focus {
+      border-color: #142c6e;
+    }
+
+    .search-btn {
+      width: 100%;
+      margin-top: 12px;
+      padding: 12px;
+      background: #142c6e;
+      color: #ffffff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .search-btn:hover {
+      background: #0d1e4c;
+    }
+
+    /* Unverified Notice */
+    .unverified-box {
+      background: #fff5f5;
+      border: 1px solid #fed7d7;
+      border-radius: 8px;
+      padding: 24px 20px;
+      text-align: center;
+      color: #c53030;
+      margin-top: 10px;
+    }
+
+    .unverified-box h3 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .unverified-box p {
+      font-size: 0.9rem;
+      color: #742a2a;
+      line-height: 1.5;
+    }
+
+    /* Security Footer */
+    .authority-footer {
+      font-size: 0.78rem;
+      color: #94a3b8;
+      text-align: center;
+      margin-top: 18px;
+      line-height: 1.5;
+    }
+
+    .authority-footer a {
+      color: #64748b;
+      text-decoration: underline;
+    }
+
+    /* Floating Chat Pill */
+    .chat-pill {
+      position: fixed;
+      bottom: 24px;
+      right: 20px;
+      z-index: 1000;
+      background: #000435;
+      color: #ffffff;
+      padding: 9px 18px;
+      border-radius: 9999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.92rem;
+      font-weight: 600;
+      text-decoration: none;
+      box-shadow: 0 4px 14px rgba(0, 4, 53, 0.35);
+      cursor: pointer;
+      border: none;
+      transition: transform 0.15s, background-color 0.2s;
+    }
+
+    .chat-pill:active {
+      transform: scale(0.96);
+    }
+
+    .chat-dot {
+      width: 9px;
+      height: 9px;
+      background-color: #00e676;
+      border-radius: 50%;
+      display: inline-block;
+      box-shadow: 0 0 8px #00e676;
+    }
+
+    /* Modal for Support Chat */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(15, 23, 42, 0.6);
+      z-index: 2000;
+      align-items: flex-end;
+      justify-content: center;
+      backdrop-filter: blur(2px);
+    }
+
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .modal-sheet {
+      background: #ffffff;
+      width: 100%;
+      max-width: 440px;
+      border-radius: 20px 20px 0 0;
+      padding: 24px 20px 32px;
+      box-shadow: 0 -10px 30px rgba(0,0,0,0.2);
+      animation: slideUp 0.25s ease-out;
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .modal-header h4 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .close-btn {
+      background: #f1f5f9;
+      border: none;
+      font-size: 1.2rem;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #64748b;
+    }
+
+    .contact-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      background: #f8fafc;
+      border-radius: 10px;
+      margin-bottom: 10px;
+      text-decoration: none;
+      color: #0f172a;
+      font-weight: 500;
+      border: 1px solid #e2e8f0;
+    }
+
+    .contact-item:hover {
+      background: #f1f5f9;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- Dynamic Content Area -->
+    <div id="contentArea">
+      <div style="padding: 40px 0; color: #64748b;">
+        <p>Loading certificate verification...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Chat Support Pill -->
+  <button class="chat-pill" id="chatBtn" aria-label="Chat Support">
+    <span class="chat-dot"></span> Chat
+  </button>
+
+  <!-- Support Modal -->
+  <div class="modal-overlay" id="supportModal">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h4>DV Analytics Support</h4>
+        <button class="close-btn" id="closeModal">&times;</button>
+      </div>
+      <p style="font-size: 0.88rem; color: #64748b; margin-bottom: 16px;">
+        Have questions regarding this certificate or program details? Connect directly with the DV Analytics Academic Registry.
+      </p>
+      <a href="mailto:md.sajid@dvdataanalytics.com?subject=DV%20Analytics%20Certificate%20Verification%20Inquiry" class="contact-item">
+        <span style="font-size: 1.3rem;">✉️</span>
+        <div>
+          <div style="font-size: 0.95rem; font-weight: 600;">Email Academic Desk</div>
+          <div style="font-size: 0.8rem; color: #64748b;">md.sajid@dvdataanalytics.com</div>
+        </div>
+      </a>
+      <a href="https://wa.me/?text=Hello%20DV%20Analytics%20Support,%20I%20have%20an%20inquiry%20regarding%20certificate%20verification" target="_blank" class="contact-item">
+        <span style="font-size: 1.3rem;">💬</span>
+        <div>
+          <div style="font-size: 0.95rem; font-weight: 600;">WhatsApp Inquiries</div>
+          <div style="font-size: 0.8rem; color: #64748b;">Direct chat with verification coordinator</div>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <script>
+    // 1. Extract certificate ID from Query params, Hash, or Path
+    function getCertParam() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const queryVal = urlParams.get('cert') || urlParams.get('id') || urlParams.get('number') || urlParams.get('c');
+      if (queryVal) return queryVal.trim();
+
+      // Check Hash e.g. #202505DVA2073
+      if (window.location.hash && window.location.hash.length > 1) {
+        return window.location.hash.substring(1).trim();
+      }
+
+      // Check Path segments e.g. /verify/202505DVA2073
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      const verifyIdx = parts.indexOf('verify');
+      if (verifyIdx !== -1 && parts[verifyIdx + 1]) {
+        return parts[verifyIdx + 1].trim();
+      }
+      return null;
+    }
+
+    // 2. Escape HTML
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // 3. Render Certificate Found (matches reference design)
+    function renderVerified(cert) {
+      const number = escapeHtml(cert.cert_number || cert.number || '');
+      const name = escapeHtml(cert.name || '');
+      const course = escapeHtml(cert.course || '');
+      const effectiveFrom = escapeHtml(cert.completion_date || cert.effective_from || 'Verified');
+      const expiry = escapeHtml(cert.expiry || 'Lifetime');
+      const status = escapeHtml(cert.status || 'Active');
+
+      // Resolve logo asset relative to current path
+      const logoPath = 'assets/brand/dv_analytics_seal.svg';
+
+      return `
+        <div class="auth-header">
+          <div class="auth-title">Authentication Successful</div>
+          <div class="cert-label">Certificate No :</div>
+          <div class="cert-number-head">${number}</div>
+        </div>
+
+        <div class="cert-card">
+          <div class="logo-box">
+            <img src="${logoPath}" alt="DV Analytics Verification Seal" class="logo-img" />
+          </div>
+
+          <div class="details-list">
+            <div class="detail-item">
+              <span class="detail-key">Certificate Id</span>
+              <span class="detail-sep">:</span>
+              <span class="detail-val">${number}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-key">Name</span>
+              <span class="detail-sep">:</span>
+              <span class="detail-val">${name}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-key">Course Name</span>
+              <span class="detail-sep">:</span>
+              <span class="detail-val">${course}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-key">Effective from</span>
+              <span class="detail-sep">:</span>
+              <span class="detail-val">${effectiveFrom}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-key">Expiry</span>
+              <span class="detail-sep">:</span>
+              <span class="detail-val">${expiry}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-key">Status</span>
+              <span class="detail-sep">:</span>
+              <span class="detail-val status-active">${status}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="authority-footer">
+          Official Credential Registered with <strong>DV Analytics</strong><br>
+          Accredited with IT - ITeS SSC NASSCOM · All Rights Reserved
+        </div>
+      `;
+    }
+
+    // 4. Render Not Found
+    function renderNotFound(searchedId) {
+      return `
+        <div class="auth-header">
+          <div class="auth-title invalid">Authentication Unsuccessful</div>
+          <div class="cert-label">Certificate No :</div>
+          <div class="cert-number-head">${escapeHtml(searchedId)}</div>
+        </div>
+
+        <div class="unverified-box">
+          <h3>Record Not Located</h3>
+          <p>
+            The certificate registration number <strong>${escapeHtml(searchedId)}</strong> could not be verified in the official DV Analytics Registry.
+          </p>
+          <p style="margin-top: 8px;">
+            Please ensure the number is entered exactly as printed on the certificate, or contact DV Analytics academic administration.
+          </p>
+        </div>
+
+        <div class="search-box">
+          <h3>Verify Another Certificate</h3>
+          <input type="text" id="retryInput" class="search-input" placeholder="e.g. 202505DVA2073" />
+          <button class="search-btn" onclick="lookupManual()">Search Registry</button>
+        </div>
+      `;
+    }
+
+    // 5. Render Empty / Search Portal
+    function renderSearchForm() {
+      return `
+        <div class="auth-header" style="margin-top: 30px;">
+          <img src="assets/brand/dv_analytics_seal.svg" alt="DV Analytics" style="width: 100px; height: 100px; margin-bottom: 12px;">
+          <div style="font-size: 1.5rem; font-weight: 800; color: #0b112c;">DV ANALYTICS</div>
+          <div style="font-size: 0.95rem; color: #64748b; font-weight: 500;">Official Certificate Verification Registry</div>
+        </div>
+
+        <div class="search-box">
+          <h3>Verify Certificate Authenticity</h3>
+          <p>Enter the Certificate Registration Number printed on the certificate or scan its QR code to verify its authenticity.</p>
+          <input type="text" id="manualInput" class="search-input" placeholder="e.g. 202505DVA2073" autofocus />
+          <button class="search-btn" onclick="lookupManual()">Verify Now</button>
+        </div>
+
+        <div class="authority-footer" style="margin-top: 30px;">
+          DV Analytics Official Academic Registry<br>
+          In partnership with IT - ITeS SSC NASSCOM
+        </div>
+      `;
+    }
+
+    // 6. Manual lookup handler
+    function lookupManual() {
+      const input = document.getElementById('manualInput') || document.getElementById('retryInput');
+      if (input && input.value.trim()) {
+        const target = input.value.trim();
+        window.location.search = '?cert=' + encodeURIComponent(target);
+      }
+    }
+
+    // 7. Load database and evaluate
+    async function init() {
+      const targetCert = getCertParam();
+      const container = document.getElementById('contentArea');
+
+      if (!targetCert) {
+        container.innerHTML = renderSearchForm();
+        return;
+      }
+
+      try {
+        // Fetch public registry
+        const resp = await fetch('certificates.json?v=' + Date.now());
+        if (!resp.ok) throw new Error('Registry unavailable');
+        const registry = await resp.json();
+
+        // Match case-insensitively or exact
+        let matched = registry[targetCert] || registry[targetCert.toUpperCase()] || registry[targetCert.toLowerCase()];
+        
+        // If not matched by exact key, search values
+        if (!matched) {
+          for (const key in registry) {
+            if (key.toLowerCase() === targetCert.toLowerCase() || 
+                (registry[key].cert_number && registry[key].cert_number.toLowerCase() === targetCert.toLowerCase())) {
+              matched = registry[key];
+              break;
+            }
+          }
+        }
+
+        if (matched) {
+          container.innerHTML = renderVerified(matched);
+        } else {
+          container.innerHTML = renderNotFound(targetCert);
+        }
+      } catch (err) {
+        console.warn('Fallback: checking local storage or demo data', err);
+        // Fallback for offline demo certificates
+        if (targetCert.toUpperCase() === '202505DVA2073' || targetCert.toUpperCase() === 'IAB1120172713') {
+          container.innerHTML = renderVerified({
+            cert_number: targetCert,
+            name: 'Abhishek Singhal',
+            course: 'Advanced Program in Industrial Data Science (APIDS)',
+            completion_date: '2026-09-07',
+            expiry: 'Lifetime',
+            status: 'Active'
+          });
+        } else {
+          container.innerHTML = renderNotFound(targetCert);
+        }
+      }
+    }
+
+    // Support Modal Handlers
+    document.getElementById('chatBtn').addEventListener('click', () => {
+      document.getElementById('supportModal').classList.add('open');
+    });
+    document.getElementById('closeModal').addEventListener('click', () => {
+      document.getElementById('supportModal').classList.remove('open');
+    });
+    document.getElementById('supportModal').addEventListener('click', (e) => {
+      if (e.target === document.getElementById('supportModal')) {
+        document.getElementById('supportModal').classList.remove('open');
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>

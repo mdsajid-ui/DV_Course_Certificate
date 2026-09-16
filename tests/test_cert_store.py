@@ -34,11 +34,11 @@ def test_different_students_get_sequential_numbers(tmp_path):
     cs = _fresh_store(tmp_path)
     a = cs.issue_or_get_certificate_number(
         name="A", email="a@example.com", course="APIDS", completion_date="10-09-2026",
-        institute_code="DVA", course_code="APIDS", year="2026",
+        institute_code="DVA", course_code="APIDS", year="2026", format_style="LEGACY", start_seq=1,
     )
     b = cs.issue_or_get_certificate_number(
         name="B", email="b@example.com", course="APIDS", completion_date="10-09-2026",
-        institute_code="DVA", course_code="APIDS", year="2026",
+        institute_code="DVA", course_code="APIDS", year="2026", format_style="LEGACY", start_seq=1,
     )
     assert a.cert_number == "DVA-APIDS-2026-000001"
     assert b.cert_number == "DVA-APIDS-2026-000002"

@@ -1,0 +1,57 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="100%" height="100%">
+  <defs>
+    <path id="topCurve" d="M 40,150 A 110,110 0 1,1 260,150" fill="none" />
+    <path id="bottomCurve" d="M 252,150 A 102,102 0 0,1 48,150" fill="none" />
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#142c6e"/>
+      <stop offset="100%" stop-color="#091538"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Outer Rings -->
+  <circle cx="150" cy="150" r="142" fill="none" stroke="#142c6e" stroke-width="4"/>
+  <circle cx="150" cy="150" r="135" fill="none" stroke="#142c6e" stroke-width="1.5"/>
+
+  <!-- Top Text -->
+  <text font-family="'Inter', 'Segoe UI', Arial, sans-serif" font-size="11.5" font-weight="700" fill="#142c6e" letter-spacing="1.8">
+    <textPath href="#topCurve" startOffset="50%" text-anchor="middle">
+      DV DATA &amp; ANALYTICS • VERIFIED
+    </textPath>
+  </text>
+
+  <!-- Bottom Text -->
+  <text font-family="'Inter', 'Segoe UI', Arial, sans-serif" font-size="9" font-weight="700" fill="#142c6e" letter-spacing="1.5">
+    <textPath href="#bottomCurve" startOffset="50%" text-anchor="middle">
+      IT - ITeS SSC NASSCOM ACCREDITED
+    </textPath>
+  </text>
+
+  <!-- Inner Circle Border -->
+  <circle cx="150" cy="150" r="88" fill="none" stroke="#142c6e" stroke-width="3.5"/>
+  <circle cx="150" cy="150" r="84" fill="#f8fafc" stroke="#142c6e" stroke-width="1"/>
+
+  <!-- Globe Grid Lines inside inner circle -->
+  <g clip-path="url(#globeClip)">
+    <clipPath id="globeClip">
+      <circle cx="150" cy="150" r="83"/>
+    </clipPath>
+    <rect x="65" y="65" width="170" height="170" fill="#142c6e"/>
+    <ellipse cx="150" cy="150" rx="83" ry="55" fill="none" stroke="#ffffff" stroke-width="1.2" opacity="0.6"/>
+    <ellipse cx="150" cy="150" rx="83" ry="28" fill="none" stroke="#ffffff" stroke-width="1.2" opacity="0.6"/>
+    <line x1="67" y1="150" x2="233" y2="150" stroke="#ffffff" stroke-width="1.4" opacity="0.7"/>
+    <ellipse cx="150" cy="150" rx="55" ry="83" fill="none" stroke="#ffffff" stroke-width="1.2" opacity="0.6"/>
+    <ellipse cx="150" cy="150" rx="28" ry="83" fill="none" stroke="#ffffff" stroke-width="1.2" opacity="0.6"/>
+    <line x1="150" y1="67" x2="150" y2="233" stroke="#ffffff" stroke-width="1.4" opacity="0.7"/>
+  </g>
+
+  <!-- Center White Emblem / Banner for DV Analytics -->
+  <rect x="70" y="123" width="160" height="54" rx="6" fill="#ffffff" stroke="#142c6e" stroke-width="2.5"/>
+  
+  <!-- DV Brand Monogram / Text -->
+  <text x="150" y="152" font-family="'Segoe UI', Arial, sans-serif" font-size="20" font-weight="900" fill="#142c6e" text-anchor="middle" letter-spacing="1">
+    DV <tspan fill="#e63946">ANALYTICS</tspan>
+  </text>
+  <text x="150" y="167" font-family="'Segoe UI', Arial, sans-serif" font-size="7.5" font-weight="700" fill="#64748b" text-anchor="middle" letter-spacing="1.2">
+    TRANSFORMING YOU
+  </text>
+</svg>

@@ -640,7 +640,7 @@ defaults = {
     "cert_batch_prefix": "202505",
     "cert_start_seq": 2075,
     "cert_year": "2025",
-    "verification_base_url": os.environ.get("CERTIFICATE_VERIFICATION_BASE_URL", "http://localhost:8000"),
+    "verification_base_url": os.environ.get("CERTIFICATE_VERIFICATION_BASE_URL", "https://mdsajid-ui.github.io/DV_Course_Certificate"),
 }
 
 for k, v in defaults.items():
@@ -853,6 +853,12 @@ def build_participant_cert(rec: dict, template_mode: str, default_course: str) -
     try:
         vault_path = os.path.join(VAULT_DIR, f"{cert_number}.pdf")
         shutil.copyfile(pdf_path, vault_path)
+    except Exception:
+        pass
+
+    # Automatically sync public verification registry for GitHub Pages
+    try:
+        cert_store.export_public_json()
     except Exception:
         pass
 
@@ -1174,10 +1180,16 @@ with tab1:
                 <div style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:10px; padding:10px 14px; margin-top:24px; font-size:12.5px; color:#334155;">
                     <strong>🎯 Auto Sequence Preview:</strong><br>
                     <code>{sample_seq}</code>, <code>{st.session_state.cert_batch_prefix}{st.session_state.institute_code}{int(st.session_state.cert_start_seq)+1}</code>...
+                    <div style="margin-top:6px; color:#15803d; font-weight:600;">
+                        🌐 GitHub Pages Verification Ready
+                    </div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
+            if st.button("🔄 Sync certificates.json to GitHub Pages", key="btn_sync_gh_pages"):
+                count = cert_store.export_public_json()
+                st.success(f"Synced {count} certificate records to certificates.json for GitHub Pages!")
 
         st.caption(
             f"Active Template File: `assets/templates/certificate_{st.session_state.selected_official_course}_blank.pptx` · "

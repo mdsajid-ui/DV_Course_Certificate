@@ -14,7 +14,7 @@ from qrcode.constants import ERROR_CORRECT_M
 
 
 def verification_url(cert_number: str, base_url: Optional[str] = None) -> str:
-    base_url = (base_url or os.environ.get("CERTIFICATE_VERIFICATION_BASE_URL", "http://localhost:8000")).rstrip("/")
+    base_url = (base_url or os.environ.get("CERTIFICATE_VERIFICATION_BASE_URL", "https://mdsajid-ui.github.io/DV_Course_Certificate")).rstrip("/")
     return f"{base_url}/verify/{cert_number}"
 
 

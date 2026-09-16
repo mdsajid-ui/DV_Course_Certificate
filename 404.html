@@ -1,0 +1,37 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Redirecting to Certificate Verification · DV Analytics</title>
+  <script>
+    // GitHub Pages SPA router: Catch /verify/<cert_number> or any deep path
+    (function() {
+      var pathname = window.location.pathname;
+      var repoBase = '/DV_Course_Certificate';
+      var cleanPath = pathname;
+      if (cleanPath.startsWith(repoBase)) {
+        cleanPath = cleanPath.substring(repoBase.length);
+      }
+      var parts = cleanPath.split('/').filter(Boolean);
+      var certNo = '';
+      if (parts.length > 0) {
+        if (parts[0].toLowerCase() === 'verify' && parts.length > 1) {
+          certNo = parts[1];
+        } else if (parts[0].toLowerCase() !== 'verify') {
+          certNo = parts[0];
+        }
+      }
+
+      var targetUrl = repoBase + '/';
+      if (certNo) {
+        targetUrl += '?cert=' + encodeURIComponent(certNo);
+      }
+      window.location.replace(targetUrl);
+    })();
+  </script>
+</head>
+<body style="font-family:sans-serif; text-align:center; padding:50px;">
+  <h2>Redirecting to official certificate verification...</h2>
+  <p>If you are not redirected automatically, <a id="fallbackLink" href="./">click here</a>.</p>
+</body>
+</html>
