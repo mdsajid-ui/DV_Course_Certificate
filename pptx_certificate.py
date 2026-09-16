@@ -54,6 +54,7 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 from pptx import Presentation
@@ -255,11 +256,42 @@ def render_certificate_pdf(
         prs.save(filled_pptx)
 
         if has_soffice:
+            # Provide an isolated, fully-writable UserInstallation and environment
+            # so LibreOffice never tries to create profile or cache dirs in /var/www
+            # or conflict with concurrent conversions.
+            lo_profile_dir = os.path.join(tmpdir, "lo_profile")
+            os.makedirs(lo_profile_dir, exist_ok=True)
+            profile_uri = Path(lo_profile_dir).resolve().as_uri()
+
+            lo_env = os.environ.copy()
+            lo_env["HOME"] = tmpdir
+            lo_env["TMPDIR"] = tmpdir
+            lo_env["XDG_CONFIG_HOME"] = os.path.join(tmpdir, "config")
+            lo_env["XDG_CACHE_HOME"] = os.path.join(tmpdir, "cache")
+            lo_env["XDG_DATA_HOME"] = os.path.join(tmpdir, "data")
+            lo_env["SAL_USE_VCLPLUGIN"] = "gen"
+
+            cmd = [
+                "soffice",
+                "--headless",
+                f"-env:UserInstallation={profile_uri}",
+                "--nodefault",
+                "--nofirststartwizard",
+                "--nolockcheck",
+                "--nologo",
+                "--norestore",
+                "--convert-to",
+                "pdf",
+                "--outdir",
+                tmpdir,
+                filled_pptx,
+            ]
             result = subprocess.run(
-                ["soffice", "--headless", "--convert-to", "pdf", "--outdir", tmpdir, filled_pptx],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=120,
+                env=lo_env,
             )
             produced = os.path.join(tmpdir, "filled.pdf")
             if result.returncode != 0 or not os.path.exists(produced):
