@@ -80,3 +80,58 @@ def test_lookup_by_cert_number_for_verification(tmp_path):
     assert found is not None
     assert found.name == "Priya Nair"
     assert cs.get_by_cert_number("BOGUS-NUMBER") is None
+
+
+def test_collision_resolution_when_cert_number_already_taken(tmp_path):
+    cs = _fresh_store(tmp_path)
+    # Student 1 gets 202505DVA2075
+    rec1 = cs.issue_or_get_certificate_number(
+        name="Student One",
+        email="s1@example.com",
+        course="APIDS",
+        start_seq=2075,
+        batch_prefix="202505",
+        institute_code="DVA",
+    )
+    assert rec1.cert_number == "202505DVA2075"
+
+    # Reset counter back to 2075 to simulate counter-reset / out-of-sync situation
+    bucket = "DVA|GLOBAL|202505"
+    cs.set_sequence_counter(bucket, 2075)
+
+    # Student 2 should NOT crash with UNIQUE constraint failed, but cleanly get 202505DVA2076
+    rec2 = cs.issue_or_get_certificate_number(
+        name="Sk Abdul Sajid",
+        email="md.sajid@dvanalyticsmds.com",
+        course="APIDS",
+        start_seq=2075,
+        batch_prefix="202505",
+        institute_code="DVA",
+    )
+    assert rec2.cert_number == "202505DVA2076"
+    assert rec1.cert_number != rec2.cert_number
+
+
+def test_delete_certificate_and_test_cleanup(tmp_path):
+    cs = _fresh_store(tmp_path)
+    rec1 = cs.issue_or_get_certificate_number(
+        name="Sample Student",
+        email="sample.student@dvanalytics.com",
+        course="APIDS",
+    )
+    rec2 = cs.issue_or_get_certificate_number(
+        name="Real Student",
+        email="real@example.com",
+        course="APIDS",
+    )
+
+    # Clean up test certificates
+    deleted_count = cs.delete_test_certificates()
+    assert deleted_count >= 1
+    assert cs.get_by_cert_number(rec1.cert_number) is None
+    assert cs.get_by_cert_number(rec2.cert_number) is not None
+
+    # Delete specific certificate
+    ok = cs.delete_certificate(rec2.cert_number)
+    assert ok is True
+    assert cs.get_by_cert_number(rec2.cert_number) is None

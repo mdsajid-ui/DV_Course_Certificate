@@ -31,6 +31,7 @@ If you later switch Google Sheets auth to a service account or OAuth
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import sqlite3
@@ -40,6 +41,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
+
+logger = logging.getLogger("cert_store")
 
 DB_PATH = os.environ.get("CERT_DB_PATH", os.path.join(os.path.dirname(__file__), "data", "certificates.db"))
 
@@ -280,7 +283,7 @@ def _next_sequence(conn: sqlite3.Connection, bucket: str, start_seq: int = 2075)
     if row is None:
         conn.execute("INSERT INTO counters (bucket, next_seq) VALUES (?, ?)", (bucket, start_seq + 1))
         return start_seq
-    seq = row["next_seq"]
+    seq = max(int(row["next_seq"]), int(start_seq))
     conn.execute("UPDATE counters SET next_seq = ? WHERE bucket = ?", (seq + 1, bucket))
     return seq
 
@@ -315,6 +318,46 @@ def format_cert_number(
     return f"{prefix}{inst}{seq}"
 
 
+def _allocate_next_available_cert_number(
+    conn: sqlite3.Connection,
+    bucket: str,
+    institute_code: str,
+    batch_prefix: str,
+    course_code: str,
+    format_style: str,
+    start_seq: int = 2075,
+) -> str:
+    """
+    Finds and allocates the next strictly unused, collision-free certificate number.
+    Checks the certificates table in real time to prevent UNIQUE constraint collisions.
+    """
+    row = conn.execute("SELECT next_seq FROM counters WHERE bucket = ?", (bucket,)).fetchone()
+    current_next = row["next_seq"] if row else start_seq
+    candidate_seq = max(int(current_next), int(start_seq))
+
+    while True:
+        candidate_number = format_cert_number(
+            institute_code=institute_code,
+            batch_prefix=batch_prefix,
+            seq=candidate_seq,
+            course_code=course_code,
+            format_style=format_style,
+        )
+        exists = conn.execute(
+            "SELECT 1 FROM certificates WHERE cert_number = ?", (candidate_number,)
+        ).fetchone()
+        if not exists:
+            conn.execute(
+                """
+                INSERT INTO counters (bucket, next_seq) VALUES (?, ?)
+                ON CONFLICT(bucket) DO UPDATE SET next_seq = excluded.next_seq
+                """,
+                (bucket, candidate_seq + 1),
+            )
+            return candidate_number
+        candidate_seq += 1
+
+
 def issue_or_get_certificate_number(
     *,
     name: str,
@@ -335,7 +378,7 @@ def issue_or_get_certificate_number(
     """
     Idempotent: if this (email, course) already has a certificate number,
     return the existing record untouched. Otherwise atomically allocate the
-    next sequence number (e.g. 202505DVA2075) and persist a new record.
+    next sequence number (e.g. 202505DVA2075) and persist a new record without collision.
     """
     key = student_key(email, course)
     effective_prefix = (batch_prefix or year or "202505").strip()
@@ -360,30 +403,109 @@ def issue_or_get_certificate_number(
             bucket = f"{institute_code}|{course_code}|{effective_prefix}"
         else:
             bucket = f"{institute_code}|GLOBAL|{effective_prefix}"
-        if existing_number:
-            cert_number = existing_number.strip()
+
+        if existing_number and str(existing_number).strip():
+            candidate = str(existing_number).strip()
+            existing_row = conn.execute(
+                "SELECT * FROM certificates WHERE cert_number = ?", (candidate,)
+            ).fetchone()
+            if existing_row:
+                if existing_row["student_key"] == key:
+                    cert_number = candidate
+                else:
+                    logger.warning(
+                        "Certificate number %s is already assigned to %s (%s). Allocating next available number.",
+                        candidate, existing_row["name"], existing_row["email"]
+                    )
+                    cert_number = _allocate_next_available_cert_number(
+                        conn=conn,
+                        bucket=bucket,
+                        institute_code=institute_code,
+                        batch_prefix=effective_prefix,
+                        course_code=course_code,
+                        format_style=format_style,
+                        start_seq=start_seq,
+                    )
+            else:
+                cert_number = candidate
         else:
-            seq = _next_sequence(conn, bucket, start_seq=start_seq)
-            cert_number = format_cert_number(
+            cert_number = _allocate_next_available_cert_number(
+                conn=conn,
+                bucket=bucket,
                 institute_code=institute_code,
                 batch_prefix=effective_prefix,
-                seq=seq,
                 course_code=course_code,
                 format_style=format_style,
+                start_seq=start_seq,
             )
-            
+
         now = datetime.now(timezone.utc).isoformat()
-        conn.execute(
-            """
-            INSERT INTO certificates
-                (student_key, cert_number, name, email, course, completion_date,
-                 status, created_at, last_sent_at, send_count, student_id, s3_key, s3_bucket)
-            VALUES (?, ?, ?, ?, ?, ?, 'VALID', ?, NULL, 0, ?, ?, ?)
-            """,
-            (key, cert_number, name, email, course, completion_date, now, student_id, s3_key, s3_bucket),
-        )
+        for attempt in range(5):
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO certificates
+                        (student_key, cert_number, name, email, course, completion_date,
+                         status, created_at, last_sent_at, send_count, student_id, s3_key, s3_bucket)
+                    VALUES (?, ?, ?, ?, ?, ?, 'VALID', ?, NULL, 0, ?, ?, ?)
+                    """,
+                    (key, cert_number, name, email, course, completion_date, now, student_id, s3_key, s3_bucket),
+                )
+                break
+            except sqlite3.IntegrityError as ie:
+                if "cert_number" in str(ie) or "UNIQUE" in str(ie):
+                    logger.warning(
+                        "Integrity collision on cert_number %s (attempt %d). Allocating next sequence: %s",
+                        cert_number, attempt, ie
+                    )
+                    cert_number = _allocate_next_available_cert_number(
+                        conn=conn,
+                        bucket=bucket,
+                        institute_code=institute_code,
+                        batch_prefix=effective_prefix,
+                        course_code=course_code,
+                        format_style=format_style,
+                        start_seq=start_seq,
+                    )
+                else:
+                    raise
+
         row = conn.execute("SELECT * FROM certificates WHERE student_key = ?", (key,)).fetchone()
         return _row_to_record(row)
+
+
+def delete_certificate(cert_number: str) -> bool:
+    """Deletes a certificate record from the registry (e.g. for correcting errors or removing test records)."""
+    with _lock, _connect() as conn:
+        cursor = conn.execute("DELETE FROM certificates WHERE cert_number = ?", (cert_number.strip(),))
+        deleted = cursor.rowcount > 0
+    if deleted:
+        try:
+            export_public_json()
+        except Exception:
+            pass
+    return deleted
+
+
+def delete_test_certificates() -> int:
+    """Removes sample/test certificates (e.g. sample.student@... or 'Sample Student')."""
+    with _lock, _connect() as conn:
+        cursor = conn.execute(
+            """
+            DELETE FROM certificates
+             WHERE email LIKE '%sample%'
+                OR email LIKE '%test%'
+                OR name LIKE '%Sample Student%'
+                OR name LIKE '%Test Student%'
+            """
+        )
+        count = cursor.rowcount
+    if count > 0:
+        try:
+            export_public_json()
+        except Exception:
+            pass
+    return count
 
 
 def mark_sent(cert_number: str) -> None:

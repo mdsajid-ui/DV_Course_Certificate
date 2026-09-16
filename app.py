@@ -1253,9 +1253,18 @@ with tab1:
                 """,
                 unsafe_allow_html=True,
             )
-            if st.button("🔄 Sync certificates.json to GitHub Pages", key="btn_sync_gh_pages"):
-                count = cert_store.export_public_json()
-                st.success(f"Synced {count} certificate records to certificates.json for GitHub Pages!")
+            c_s1, c_s2 = st.columns(2)
+            with c_s1:
+                if st.button("🔄 Sync certificates.json", key="btn_sync_gh_pages", use_container_width=True):
+                    count = cert_store.export_public_json()
+                    st.success(f"Synced {count} certificate records to GitHub Pages!")
+            with c_s2:
+                if st.button("🧹 Reset Sequence to Start", key="btn_reset_counter", use_container_width=True, help="Removes test/dummy certificates and resets sequence counter"):
+                    deleted_cnt = cert_store.delete_test_certificates()
+                    bucket = f"{st.session_state.institute_code}|GLOBAL|{st.session_state.cert_batch_prefix}"
+                    cert_store.set_sequence_counter(bucket, int(st.session_state.cert_start_seq))
+                    st.success(f"✓ Reset sequence to {st.session_state.cert_start_seq}! (Cleared {deleted_cnt} test records)")
+                    st.rerun()
 
         st.caption(
             f"Active Template File: `assets/templates/certificate_{st.session_state.selected_official_course}_blank.pptx` · "
@@ -2098,7 +2107,7 @@ with tab4:
                     )
 
                     # Action buttons for this specific student
-                    ac1, ac2, ac3 = st.columns([1.5, 1.5, 1])
+                    ac1, ac2, ac3, ac4 = st.columns([1.3, 1.3, 1, 0.8])
                     with ac1:
                         pdf_path = ensure_cert_pdf_exists(rec)
                         if os.path.exists(pdf_path):
@@ -2110,6 +2119,7 @@ with tab4:
                                     mime="application/pdf",
                                     key=f"dl_vault_{rec.cert_number}",
                                     use_container_width=True,
+                                    help="Download a fresh copy of the certificate PDF",
                                 )
                     with ac2:
                         if st.button(f"✉️ Re-email to {rec.name}", key=f"resend_{rec.cert_number}", use_container_width=True):
@@ -2140,6 +2150,11 @@ with tab4:
                             base_url=st.session_state.get("verification_base_url", "http://localhost:8000"),
                         )
                         st.link_button("👁️ Verify Online", verify_link, use_container_width=True)
+                    with ac4:
+                        if st.button("🗑️ Delete", key=f"del_vault_{rec.cert_number}", use_container_width=True, help="Delete certificate record from registry"):
+                            cert_store.delete_certificate(rec.cert_number)
+                            st.success(f"✓ Deleted {rec.cert_number}")
+                            st.rerun()
 
         st.markdown("##### 📜 Master Certificate Registry & Historical Ledger")
         v_df = pd.DataFrame([
