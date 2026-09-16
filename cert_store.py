@@ -603,6 +603,15 @@ def export_public_json(output_path: str = "certificates.json") -> int:
         ).fetchall()
 
     registry = {}
+    if os.path.exists(output_path):
+        try:
+            with open(output_path, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+                if isinstance(existing, dict):
+                    registry.update(existing)
+        except Exception:
+            pass
+
     for r in rows:
         registry[r["cert_number"]] = {
             "cert_number": r["cert_number"],
@@ -645,6 +654,20 @@ def export_public_json(output_path: str = "certificates.json") -> int:
         os.makedirs(os.path.dirname(alt_path), exist_ok=True)
         with open(alt_path, "w", encoding="utf-8") as f:
             json.dump(registry, f, indent=2)
+    except Exception:
+        pass
+
+    try:
+        import s3_service
+        s3 = s3_service.get_s3_storage()
+        if s3.is_configured():
+            s3.get_client().put_object(
+                Bucket=s3.bucket,
+                Key="registry/certificates.json",
+                Body=json.dumps(registry, indent=2).encode("utf-8"),
+                ContentType="application/json",
+                ACL="public-read",
+            )
     except Exception:
         pass
 

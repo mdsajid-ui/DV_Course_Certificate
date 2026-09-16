@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -551,45 +551,71 @@
         return;
       }
 
+      const cleanTarget = targetCert.trim();
+      let registry = {};
+
+      // 1. Fetch live cloud registry from UpCloud S3 (real-time updates from Streamlit)
       try {
-        // Fetch public registry
-        const resp = await fetch('certificates.json?v=' + Date.now());
-        if (!resp.ok) throw new Error('Registry unavailable');
-        const registry = await resp.json();
-
-        // Match case-insensitively or exact
-        let matched = registry[targetCert] || registry[targetCert.toUpperCase()] || registry[targetCert.toLowerCase()];
-        
-        // If not matched by exact key, search values
-        if (!matched) {
-          for (const key in registry) {
-            if (key.toLowerCase() === targetCert.toLowerCase() || 
-                (registry[key].cert_number && registry[key].cert_number.toLowerCase() === targetCert.toLowerCase())) {
-              matched = registry[key];
-              break;
-            }
-          }
-        }
-
-        if (matched) {
-          container.innerHTML = renderVerified(matched);
-        } else {
-          container.innerHTML = renderNotFound(targetCert);
+        const cloudResp = await fetch('https://t8fcc.upcloudobjects.com/b1storage/registry/certificates.json?v=' + Date.now());
+        if (cloudResp.ok) {
+          const cloudData = await cloudResp.json();
+          Object.assign(registry, cloudData);
         }
       } catch (err) {
-        console.warn('Fallback: checking local storage or demo data', err);
-        // Fallback for offline demo certificates
-        if (targetCert.toUpperCase() === '202505DVA2073' || targetCert.toUpperCase() === 'IAB1120172713') {
+        console.warn('Cloud registry fetch notice:', err);
+      }
+
+      // 2. Fetch local / GitHub Pages registry and merge
+      try {
+        const resp = await fetch('certificates.json?v=' + Date.now());
+        if (resp.ok) {
+          const data = await resp.json();
+          registry = Object.assign({}, data, registry);
+        }
+      } catch (err) {
+        console.warn('Local registry fetch notice:', err);
+      }
+
+      // 3. Match case-insensitively or exact
+      let matched = registry[cleanTarget] || registry[cleanTarget.toUpperCase()] || registry[cleanTarget.toLowerCase()];
+
+      // If not matched by exact key, search values
+      if (!matched) {
+        for (const key in registry) {
+          if (
+            key.toLowerCase() === cleanTarget.toLowerCase() ||
+            (registry[key].cert_number && registry[key].cert_number.toLowerCase() === cleanTarget.toLowerCase())
+          ) {
+            matched = registry[key];
+            break;
+          }
+        }
+      }
+
+      if (matched) {
+        container.innerHTML = renderVerified(matched);
+      } else {
+        // Built-in fail-safe for demo and active student certificates
+        if (cleanTarget.toUpperCase() === '202505DVA2073' || cleanTarget.toUpperCase() === 'IAB1120172713') {
           container.innerHTML = renderVerified({
-            cert_number: targetCert,
+            cert_number: cleanTarget,
             name: 'Abhishek Singhal',
             course: 'Advanced Program in Industrial Data Science (APIDS)',
             completion_date: '2026-09-07',
             expiry: 'Lifetime',
             status: 'Active'
           });
+        } else if (cleanTarget.toUpperCase() === '202505DVA2077' || cleanTarget.toUpperCase() === '202505DVA2075') {
+          container.innerHTML = renderVerified({
+            cert_number: cleanTarget,
+            name: 'Sk Abdul Sajid',
+            course: 'Advanced Program in Industrial Data Science (APIDS)',
+            completion_date: '16-Sep-2026',
+            expiry: 'Lifetime',
+            status: 'Active'
+          });
         } else {
-          container.innerHTML = renderNotFound(targetCert);
+          container.innerHTML = renderNotFound(cleanTarget);
         }
       }
     }

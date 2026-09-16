@@ -782,8 +782,6 @@ def get_course_email_content(
     if use_custom and custom_subject and custom_body:
         subj = _apply_email_placeholders(custom_subject, name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url)
         body = _apply_email_placeholders(custom_body, name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url)
-        if download_url and download_url not in body:
-            body += f"\n\n🔗 Download Certificate Link:\n{download_url}"
         return subj, body
 
     c_upper = (course or "APIDS").upper()
@@ -794,12 +792,6 @@ def get_course_email_content(
 
     subj = _apply_email_placeholders(tpl["subject"], name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url)
     body = _apply_email_placeholders(tpl["body"], name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url)
-    if download_url and download_url not in body:
-        body += (
-            f"\n\n🔗 Official Certificate Download Portal (Private S3):\n"
-            f"{download_url}\n"
-            f"(Use this secure link to download your high-resolution vector PDF at any time)"
-        )
     return subj, body
 
 
