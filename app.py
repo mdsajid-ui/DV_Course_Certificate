@@ -1311,6 +1311,141 @@ with tab1:
 
     card_end()
 
+    # ------------------ Section 3: Certificate Generation Action ------------------
+    card_start("3. Generate Certificates", "Produce officially sealed, pixel-locked PDF certificates with QR code and cloud backup.")
+
+    records = st.session_state.records
+    total_recs = len(records)
+    default_course = st.session_state.selected_official_course
+
+    if total_recs > 0:
+        st.markdown(f"**Ready to generate certificates for {total_recs} participant(s):**")
+        col_g1, col_g2 = st.columns(2)
+        with col_g1:
+            if st.button("🎓 Generate All Certificates", key="tab1_btn_gen_all", use_container_width=True):
+                progress = st.progress(0, text="Initializing generation...")
+                cert_paths = {}
+
+                for i, rec in enumerate(records):
+                    name = rec["Name"]
+                    email = rec.get("Email ID", "")
+                    progress.progress((i + 1) / total_recs, text=f"Generating {i+1} of {total_recs}: {name}")
+                    try:
+                        cert_no, pdf_path, _, sha256_hash = build_participant_cert(
+                            rec, st.session_state.template_mode, default_course
+                        )
+                        cert_paths[email or name] = {
+                            "Name": name,
+                            "Email": email,
+                            "Course": rec.get("Course") or default_course,
+                            "CertNumber": cert_no,
+                            "Path": pdf_path,
+                            "SHA256": sha256_hash,
+                            "Status": "Generated",
+                        }
+                    except Exception as e:
+                        cert_paths[email or name] = {
+                            "Name": name,
+                            "Email": email,
+                            "Course": rec.get("Course") or default_course,
+                            "CertNumber": "Error",
+                            "Path": None,
+                            "SHA256": "",
+                            "Status": f"Failed: {e}",
+                        }
+                        log_event(email, "CERT_GEN_ERROR", str(e))
+
+                st.session_state.cert_paths = cert_paths
+                progress.empty()
+                ok_count = sum(1 for v in cert_paths.values() if v.get("Path"))
+                st.success(f"✓ Generation complete! Successfully generated {ok_count} of {total_recs} certificates with AES-256 security lock.")
+                st.rerun()
+
+        with col_g2:
+            if st.button("👁️ Instant Preview / Test (First Student)", key="tab1_btn_prev", use_container_width=True):
+                try:
+                    first_rec = records[0]
+                    cert_no, pdf_path, _, _ = build_participant_cert(first_rec, st.session_state.template_mode, default_course)
+                    st.session_state["tab1_preview_cert"] = (cert_no, pdf_path, first_rec["Name"])
+                    st.success(f"✓ Generated Secured Certificate: **{cert_no}** for **{first_rec['Name']}**")
+                except Exception as e:
+                    st.error(f"Could not build preview certificate: {e}")
+
+        if "tab1_preview_cert" in st.session_state:
+            p_no, p_path, p_name = st.session_state["tab1_preview_cert"]
+            if os.path.exists(p_path):
+                with open(p_path, "rb") as f:
+                    st.download_button(
+                        f"⬇️ Download Preview PDF ({p_no}.pdf) – {p_name}",
+                        data=f.read(),
+                        file_name=f"{p_no}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        key="tab1_dl_preview_btn",
+                    )
+    else:
+        st.markdown(
+            """
+            <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:12px; padding:16px 20px; margin-bottom:14px; font-size:13.5px; color:#334155;">
+                <div style="font-weight:700; color:#0f172a; margin-bottom:4px; font-size:14px;">⚡ Generate Certificates:</div>
+                <div style="margin-bottom:10px;">You haven't loaded participant rows yet. You can:</div>
+                <ul style="margin:0 0 0 18px; padding:0; line-height:1.7;">
+                    <li>Click <strong>🧪 Generate Sample Test Certificate</strong> below to instantly produce and download a test PDF with your active template, QR code, and S3 upload.</li>
+                    <li>Or add your student roster in <strong>1. Add Participants</strong> above, then click <strong>Generate All Certificates</strong>.</li>
+                </ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button("🧪 Generate Sample Test Certificate", key="tab1_btn_sample_test", use_container_width=True):
+            try:
+                sample_rec = {
+                    "Name": "Sample Student",
+                    "Email ID": "sample.student@dvanalytics.com",
+                    "Mobile Number": "9876543210",
+                    "Course": default_course,
+                    "Completion Date": datetime.now().strftime("%d-%b-%Y"),
+                    "Certificate Number": "",
+                }
+                cert_no, pdf_path, _, _ = build_participant_cert(sample_rec, st.session_state.template_mode, default_course)
+                st.session_state["tab1_sample_cert"] = (cert_no, pdf_path)
+                st.success(f"✓ Generated Test Certificate: **{cert_no}** for **Sample Student**!")
+            except Exception as e:
+                st.error(f"Could not generate test certificate: {e}")
+
+        if "tab1_sample_cert" in st.session_state:
+            s_no, s_path = st.session_state["tab1_sample_cert"]
+            if os.path.exists(s_path):
+                with open(s_path, "rb") as f:
+                    st.download_button(
+                        f"⬇️ Download Sample Certificate PDF ({s_no}.pdf)",
+                        data=f.read(),
+                        file_name=f"{s_no}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        key="tab1_dl_sample_btn",
+                    )
+
+    if st.session_state.cert_paths:
+        st.markdown("---")
+        valid_paths = [info["Path"] for info in st.session_state.cert_paths.values() if info.get("Path") and os.path.exists(info["Path"])]
+        if valid_paths:
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+                for p in valid_paths:
+                    zf.write(p, arcname=os.path.basename(p))
+            st.download_button(
+                f"📦 Download All Generated Certificates (.zip) – {len(valid_paths)} Files",
+                data=zip_buffer.getvalue(),
+                file_name="All_Certificates.zip",
+                mime="application/zip",
+                use_container_width=True,
+                key="tab1_dl_zip_btn",
+            )
+            st.info("👉 You can also switch to **Tab ② Generate Certificates** at the top to inspect the full Security Ledger or **Tab ③ Sending Formalities** to email them.")
+
+    card_end()
+
 
 # ===========================================================================
 # TAB 2 — Generate Certificates
@@ -1329,7 +1464,35 @@ with tab2:
     m4.metric("Pending Generation", max(total_recs - generated_count, 0))
 
     if total_recs == 0:
-        st.info("⚠️ Please add participants in **Step ① Add Participants & Template** first.")
+        st.info("⚠️ Please add participants in **Step ① Add Participants & Template** first, or click below to generate an instant test certificate.")
+        if st.button("🧪 Generate Sample Test Certificate", key="tab2_btn_sample_test", use_container_width=True):
+            try:
+                sample_rec = {
+                    "Name": "Sample Student",
+                    "Email ID": "sample.student@dvanalytics.com",
+                    "Mobile Number": "9876543210",
+                    "Course": st.session_state.selected_official_course,
+                    "Completion Date": datetime.now().strftime("%d-%b-%Y"),
+                    "Certificate Number": "",
+                }
+                cert_no, pdf_path, _, _ = build_participant_cert(sample_rec, st.session_state.template_mode, st.session_state.selected_official_course)
+                st.session_state["tab2_sample_cert"] = (cert_no, pdf_path)
+                st.success(f"✓ Generated Test Certificate: **{cert_no}** for **Sample Student**!")
+            except Exception as e:
+                st.error(f"Could not generate test certificate: {e}")
+
+        if "tab2_sample_cert" in st.session_state:
+            s_no, s_path = st.session_state["tab2_sample_cert"]
+            if os.path.exists(s_path):
+                with open(s_path, "rb") as f:
+                    st.download_button(
+                        f"⬇️ Download Sample Certificate PDF ({s_no}.pdf)",
+                        data=f.read(),
+                        file_name=f"{s_no}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        key="tab2_dl_sample_btn",
+                    )
     else:
         st.markdown(
             """
@@ -1349,7 +1512,7 @@ with tab2:
         g_col1, g_col2 = st.columns([1, 1])
 
         with g_col1:
-            if st.button("🎓 Generate All Certificates", use_container_width=True, disabled=(total_recs == 0)):
+            if st.button("🎓 Generate All Certificates", key="tab2_btn_gen_all", use_container_width=True, disabled=(total_recs == 0)):
                 progress = st.progress(0, text="Initializing generation...")
                 cert_paths = {}
                 default_course = st.session_state.selected_official_course
@@ -1390,7 +1553,7 @@ with tab2:
                 st.rerun()
 
         with g_col2:
-            if st.button("👁️ Instant Preview / Test (First Student)", use_container_width=True, disabled=(total_recs == 0)):
+            if st.button("👁️ Instant Preview / Test (First Student)", key="tab2_btn_prev", use_container_width=True, disabled=(total_recs == 0)):
                 try:
                     first_rec = records[0]
                     default_course = st.session_state.selected_official_course
@@ -1403,6 +1566,7 @@ with tab2:
                             file_name=f"{cert_no}.pdf",
                             mime="application/pdf",
                             use_container_width=True,
+                            key="tab2_dl_prev_btn",
                         )
                 except Exception as e:
                     st.error(f"Could not build preview certificate: {e}")
@@ -1437,6 +1601,7 @@ with tab2:
                     file_name="All_Certificates.zip",
                     mime="application/zip",
                     use_container_width=True,
+                    key="tab2_dl_zip_btn",
                 )
 
     card_end()
