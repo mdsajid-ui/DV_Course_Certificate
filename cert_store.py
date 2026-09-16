@@ -31,16 +31,18 @@ If you later switch Google Sheets auth to a service account or OAuth
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import re
+import secrets
 import sqlite3
 import threading
 import unicodedata
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, List, Tuple, Dict, Any
 
 logger = logging.getLogger("cert_store")
 
@@ -64,6 +66,21 @@ def _connect():
         conn.commit()
     finally:
         conn.close()
+
+
+def _hash_password(password: str, salt: Optional[str] = None) -> str:
+    if not salt:
+        salt = secrets.token_hex(16)
+    key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100000)
+    return f"{salt}${key.hex()}"
+
+
+def _verify_password(password: str, stored_hash: str) -> bool:
+    if "$" in stored_hash:
+        salt, key_hex = stored_hash.split("$", 1)
+        expected = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100000).hex()
+        return secrets.compare_digest(expected, key_hex)
+    return secrets.compare_digest(password, stored_hash)
 
 
 def init_db() -> None:
@@ -137,6 +154,35 @@ def init_db() -> None:
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_cert_number ON certificates(cert_number);")
+
+        # Multi-user accounts table for team member access
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                username TEXT PRIMARY KEY,
+                password_hash TEXT NOT NULL,
+                full_name TEXT,
+                role TEXT NOT NULL DEFAULT 'creator',
+                created_at TEXT NOT NULL,
+                last_login_at TEXT,
+                is_active INTEGER NOT NULL DEFAULT 1
+            );
+            """
+        )
+        # Seed default admin accounts if they do not exist
+        now = datetime.now(timezone.utc).isoformat()
+        existing_admin = conn.execute("SELECT username FROM users WHERE LOWER(username) = 'admin'").fetchone()
+        if not existing_admin:
+            conn.execute(
+                "INSERT INTO users (username, password_hash, full_name, role, created_at, is_active) VALUES (?, ?, ?, ?, ?, 1)",
+                ("admin", _hash_password("cBi19rabI7Ogl8HFjJKjEZDH"), "Administrator", "admin", now),
+            )
+        existing_sk = conn.execute("SELECT username FROM users WHERE LOWER(username) = 'sk'").fetchone()
+        if not existing_sk:
+            conn.execute(
+                "INSERT INTO users (username, password_hash, full_name, role, created_at, is_active) VALUES (?, ?, ?, ?, ?, 1)",
+                ("sk", _hash_password("cBi19rabI7Ogl8HFjJKjEZDH"), "SK Abdul Sajid", "admin", now),
+            )
 
 
 def _normalize(s: str) -> str:
@@ -672,3 +718,149 @@ def export_public_json(output_path: str = "certificates.json") -> int:
         pass
 
     return len(registry)
+
+
+# ---------------------------------------------------------------------------
+# Multi-User Account Management & Authentication
+# ---------------------------------------------------------------------------
+
+def authenticate_user(username: str, password: str) -> Optional[Dict[str, Any]]:
+    """
+    Authenticates a user against the users table.
+    Returns user dict on success, None on failure.
+    """
+    init_db()
+    u_clean = (username or "").strip()
+    p_clean = (password or "").strip()
+    if not u_clean or not p_clean:
+        return None
+
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE LOWER(username) = LOWER(?)", (u_clean,)).fetchone()
+        if not row:
+            return None
+        if not row["is_active"]:
+            logger.warning("User '%s' is deactivated and cannot log in.", u_clean)
+            return None
+        if _verify_password(p_clean, row["password_hash"]):
+            now = datetime.now(timezone.utc).isoformat()
+            conn.execute("UPDATE users SET last_login_at = ? WHERE username = ?", (now, row["username"]))
+            return {
+                "username": row["username"],
+                "full_name": row["full_name"] or row["username"],
+                "role": row["role"],
+                "created_at": row["created_at"],
+                "last_login_at": now,
+            }
+    return None
+
+
+def create_user(
+    username: str,
+    password: str,
+    full_name: str = "",
+    role: str = "creator",
+) -> Tuple[bool, str]:
+    """
+    Creates a new user account.
+    Roles: 'admin' (can manage users and full system) or 'creator' (can generate & send certificates).
+    """
+    init_db()
+    u_clean = (username or "").strip()
+    p_clean = (password or "").strip()
+    r_clean = (role or "creator").strip().lower()
+    if r_clean not in ("admin", "creator"):
+        r_clean = "creator"
+
+    if len(u_clean) < 3:
+        return False, "Username must be at least 3 characters long."
+    if not re.match(r"^[a-zA-Z0-9_\-\.@]+$", u_clean):
+        return False, "Username may only contain letters, numbers, dots, hyphens, and underscores."
+    if len(p_clean) < 6:
+        return False, "Password must be at least 6 characters long."
+
+    with _lock, _connect() as conn:
+        existing = conn.execute("SELECT username FROM users WHERE LOWER(username) = LOWER(?)", (u_clean,)).fetchone()
+        if existing:
+            return False, f"User '{u_clean}' already exists."
+
+        pwd_hash = _hash_password(p_clean)
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            """
+            INSERT INTO users (username, password_hash, full_name, role, created_at, last_login_at, is_active)
+            VALUES (?, ?, ?, ?, ?, NULL, 1)
+            """,
+            (u_clean, pwd_hash, (full_name or "").strip(), r_clean, now),
+        )
+    return True, f"User '{u_clean}' created successfully with role '{r_clean}'."
+
+
+def list_users() -> List[Dict[str, Any]]:
+    """Returns list of all registered users."""
+    init_db()
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT username, full_name, role, created_at, last_login_at, is_active FROM users ORDER BY created_at ASC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def delete_user(username: str, current_user: str = "") -> Tuple[bool, str]:
+    """
+    Deletes a user account. Safeguards against deleting current user or last admin.
+    """
+    init_db()
+    u_clean = (username or "").strip()
+    if not u_clean:
+        return False, "Invalid username."
+    if u_clean.lower() == (current_user or "").strip().lower():
+        return False, "You cannot delete your own active account."
+
+    with _lock, _connect() as conn:
+        user_row = conn.execute("SELECT * FROM users WHERE LOWER(username) = LOWER(?)", (u_clean,)).fetchone()
+        if not user_row:
+            return False, f"User '{u_clean}' not found."
+
+        if user_row["role"] == "admin":
+            admin_cnt = conn.execute(
+                "SELECT COUNT(*) as cnt FROM users WHERE role = 'admin' AND is_active = 1"
+            ).fetchone()["cnt"]
+            if admin_cnt <= 1:
+                return False, "Cannot delete the only remaining administrator account."
+
+        res = conn.execute("DELETE FROM users WHERE LOWER(username) = LOWER(?)", (u_clean,))
+        if res.rowcount > 0:
+            return True, f"User '{u_clean}' deleted successfully."
+        return False, f"User '{u_clean}' not found."
+
+
+def update_user_password(username: str, new_password: str) -> Tuple[bool, str]:
+    """Resets or updates a user's password."""
+    init_db()
+    u_clean = (username or "").strip()
+    p_clean = (new_password or "").strip()
+    if len(p_clean) < 6:
+        return False, "Password must be at least 6 characters long."
+    pwd_hash = _hash_password(p_clean)
+    with _lock, _connect() as conn:
+        res = conn.execute("UPDATE users SET password_hash = ? WHERE LOWER(username) = LOWER(?)", (pwd_hash, u_clean))
+        if res.rowcount > 0:
+            return True, f"Password updated for '{u_clean}'."
+        return False, f"User '{u_clean}' not found."
+
+
+def toggle_user_status(username: str, is_active: bool, current_user: str = "") -> Tuple[bool, str]:
+    """Enables or disables a user account."""
+    init_db()
+    u_clean = (username or "").strip()
+    if u_clean.lower() == (current_user or "").strip().lower() and not is_active:
+        return False, "You cannot deactivate your own account."
+    val = 1 if is_active else 0
+    with _lock, _connect() as conn:
+        res = conn.execute("UPDATE users SET is_active = ? WHERE LOWER(username) = LOWER(?)", (val, u_clean))
+        if res.rowcount > 0:
+            status_txt = "activated" if is_active else "deactivated"
+            return True, f"User '{u_clean}' {status_txt}."
+        return False, f"User '{u_clean}' not found."
+

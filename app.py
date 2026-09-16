@@ -43,9 +43,10 @@ import sheets_writer
 
 load_dotenv()
 
-OUTPUT_DIR = "output"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 CERT_DIR = os.path.join(OUTPUT_DIR, "certificates")
-VAULT_DIR = os.path.join("data", "issued_certificates")
+VAULT_DIR = os.path.join(BASE_DIR, "data", "issued_certificates")
 REPORT_PATH = os.path.join(OUTPUT_DIR, "Email_Sending_Report.xlsx")
 ERROR_REPORT_PATH = os.path.join(OUTPUT_DIR, "Error_Report.xlsx")
 
@@ -70,7 +71,7 @@ def login():
         """
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        #MainMenu, footer, [data-testid="stHeader"], [data-testid="stToolbar"] { display:none !important; }
+        #MainMenu, footer, [data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stSidebar"], [data-testid="collapsedControl"], section[data-testid="stSidebar"], div[data-testid="stSidebarNav"] { display:none !important; }
         html, body, [class*="css"] { font-family:'Inter',sans-serif; }
         .stApp { background:#040404; min-height:100vh; color:#fff; transition: background 0.45s ease; }
         .block-container { max-width:1080px !important; padding:2vh 28px 30px !important; }
@@ -276,19 +277,29 @@ def login():
             st.markdown('<div class="secure-note">🔒 Your connection is protected</div>', unsafe_allow_html=True)
 
     if submitted:
-        # Credentials come from Streamlit secrets / environment variables,
-        # with fallback to admin / sk and provided credentials.
-        valid_username = get_secret("APP_USERNAME", "admin")
-        valid_password = get_secret("APP_PASSWORD", "admin123")
-
-        allowed_usernames = {u.strip().lower() for u in filter(None, [valid_username, "admin", "sk"])}
-        allowed_passwords = {p for p in filter(None, [valid_password, "cBi19rabI7Ogl8HFjJKjEZDH", "admin123"])}
-
-        if username.strip().lower() in allowed_usernames and password in allowed_passwords:
+        user_info = cert_store.authenticate_user(username, password)
+        if user_info:
             st.session_state["logged_in"] = True
+            st.session_state["current_user"] = user_info["username"]
+            st.session_state["user_role"] = user_info.get("role", "creator")
+            st.session_state["user_name"] = user_info.get("full_name") or user_info["username"]
             st.rerun()
         else:
-            st.error("❌ Invalid username or password")
+            # Fallback check against environment secrets
+            valid_username = get_secret("APP_USERNAME", "admin")
+            valid_password = get_secret("APP_PASSWORD", "admin123")
+
+            allowed_usernames = {u.strip().lower() for u in filter(None, [valid_username, "admin", "sk"])}
+            allowed_passwords = {p for p in filter(None, [valid_password, "cBi19rabI7Ogl8HFjJKjEZDH", "admin123"])}
+
+            if username.strip().lower() in allowed_usernames and password in allowed_passwords:
+                st.session_state["logged_in"] = True
+                st.session_state["current_user"] = username.strip().lower()
+                st.session_state["user_role"] = "admin"
+                st.session_state["user_name"] = "Administrator" if username.strip().lower() == "admin" else "SK Abdul Sajid"
+                st.rerun()
+            else:
+                st.error("❌ Invalid username or password")
 
     st.markdown('<div class="login-footer">© 2026 DV Analytics · Course Completion Certificate Automation</div>', unsafe_allow_html=True)
 
@@ -653,6 +664,26 @@ for k, v in defaults.items():
 # Sidebar — SMTP & Configuration Status
 # ---------------------------------------------------------------------------
 with st.sidebar:
+    user_name = st.session_state.get("user_name", "User")
+    user_role = st.session_state.get("user_role", "creator")
+    role_badge = "👑 Administrator" if user_role == "admin" else "👤 Certificate Creator"
+    st.markdown(
+        f"""
+        <div style="background:rgba(15,23,42,0.65); border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:14px 16px; margin-bottom:18px;">
+            <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:0.8px; color:#94a3b8; font-weight:700;">Active Account</div>
+            <div style="font-size:15px; font-weight:700; color:#f8fafc; margin-top:3px;">{user_name}</div>
+            <div style="display:inline-block; font-size:11px; color:#38bdf8; background:rgba(56,189,248,0.12); padding:2px 8px; border-radius:6px; margin-top:4px; font-weight:600;">{role_badge}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.button("🚪 Sign Out", key="sidebar_logout_btn", use_container_width=True):
+        st.session_state["logged_in"] = False
+        st.session_state["current_user"] = None
+        st.session_state["user_role"] = None
+        st.session_state["user_name"] = None
+        st.rerun()
+
     st.markdown("### ✉️ System Status")
     cfg = SMTPConfig()
     if cfg.is_configured():
@@ -849,9 +880,9 @@ def build_participant_cert(rec: dict, template_mode: str, default_course: str) -
     if template_mode == "Official APIDS / APDA Template":
         # Select official template file
         course_clean = course.upper() if course.upper() in ("APIDS", "APDA") else "APIDS"
-        template_file = os.path.join("assets", "templates", f"certificate_{course_clean}_blank.pptx")
+        template_file = os.path.join(BASE_DIR, "assets", "templates", f"certificate_{course_clean}_blank.pptx")
         if not os.path.exists(template_file):
-            template_file = os.path.join("assets", "templates", "certificate_APIDS_blank.pptx")
+            template_file = os.path.join(BASE_DIR, "assets", "templates", "certificate_APIDS_blank.pptx")
 
         pptx_certificate.render_certificate_pdf(
             name=name,
@@ -934,65 +965,78 @@ def build_participant_cert(rec: dict, template_mode: str, default_course: str) -
     return cert_number, pdf_path, was_new, sha256_hash
 
 
-def ensure_cert_pdf_exists(record: cert_store.CertificateRecord) -> str:
+def ensure_cert_pdf_exists(record: cert_store.CertificateRecord) -> Optional[str]:
     """Returns valid path to certificate PDF, reconstructing from metadata if ever missing."""
-    cert_no = record.cert_number
-    vault_path = os.path.join(VAULT_DIR, f"{cert_no}.pdf")
-    cert_path = os.path.join(CERT_DIR, f"{cert_no}.pdf")
+    try:
+        cert_no = record.cert_number
+        vault_path = os.path.join(VAULT_DIR, f"{cert_no}.pdf")
+        cert_path = os.path.join(CERT_DIR, f"{cert_no}.pdf")
 
-    if os.path.exists(vault_path):
-        return vault_path
-    if os.path.exists(cert_path):
+        if os.path.exists(vault_path):
+            return vault_path
+        if os.path.exists(cert_path):
+            try:
+                shutil.copyfile(cert_path, vault_path)
+            except Exception:
+                pass
+            return cert_path
+
+        # Reconstruct on-the-fly if missing
+        course_clean = record.course.upper() if record.course.upper() in ("APIDS", "APDA") else "APIDS"
+        template_file = os.path.join(BASE_DIR, "assets", "templates", f"certificate_{course_clean}_blank.pptx")
+        if not os.path.exists(template_file):
+            template_file = os.path.join(BASE_DIR, "assets", "templates", "certificate_APIDS_blank.pptx")
+
+        verify_url = qr_utils.verification_url(
+            cert_no, base_url=st.session_state.get("verification_base_url", "http://localhost:8000")
+        )
+        qr_bytes = qr_utils.make_qr_image_bytes(verify_url)
+        qr_path = os.path.join(CERT_DIR, f"qr_{cert_no}.png")
+        with open(qr_path, "wb") as f:
+            f.write(qr_bytes)
+
+        pptx_certificate.render_certificate_pdf(
+            name=record.name,
+            certificate_number=cert_no,
+            completion_date=record.completion_date or datetime.now().strftime("%d-%b-%Y"),
+            qr_png_path=qr_path,
+            template_path=template_file,
+            output_pdf_path=vault_path,
+        )
         try:
-            shutil.copyfile(cert_path, vault_path)
+            from pdf_security import lock_and_protect_pdf
+            sha256_hash, _ = lock_and_protect_pdf(vault_path, allow_print=False, dpi=300)
+            if sha256_hash:
+                cert_store.store_pdf_security_hash(cert_no, sha256_hash)
         except Exception:
             pass
-        return cert_path
-
-    # Reconstruct on-the-fly if missing
-    course_clean = record.course.upper() if record.course.upper() in ("APIDS", "APDA") else "APIDS"
-    template_file = os.path.join("assets", "templates", f"certificate_{course_clean}_blank.pptx")
-    if not os.path.exists(template_file):
-        template_file = os.path.join("assets", "templates", "certificate_APIDS_blank.pptx")
-
-    verify_url = qr_utils.verification_url(
-        cert_no, base_url=st.session_state.get("verification_base_url", "http://localhost:8000")
-    )
-    qr_bytes = qr_utils.make_qr_image_bytes(verify_url)
-    qr_path = os.path.join(CERT_DIR, f"qr_{cert_no}.png")
-    with open(qr_path, "wb") as f:
-        f.write(qr_bytes)
-
-    pptx_certificate.render_certificate_pdf(
-        name=record.name,
-        certificate_number=cert_no,
-        completion_date=record.completion_date or datetime.now().strftime("%d-%b-%Y"),
-        qr_png_path=qr_path,
-        template_path=template_file,
-        output_pdf_path=vault_path,
-    )
-    from pdf_security import lock_and_protect_pdf
-    sha256_hash, _ = lock_and_protect_pdf(vault_path, allow_print=False, dpi=300)
-    if sha256_hash:
-        cert_store.store_pdf_security_hash(cert_no, sha256_hash)
-    try:
-        shutil.copyfile(vault_path, cert_path)
-    except Exception:
-        pass
-    return vault_path
+        try:
+            shutil.copyfile(vault_path, cert_path)
+        except Exception:
+            pass
+        return vault_path
+    except Exception as e:
+        log_event(record.email, "ENSURE_CERT_ERR", str(e))
+        return None
 
 
 # ---------------------------------------------------------------------------
-# TAB LAYOUT (4 Tabs)
+# TAB LAYOUT (Multi-Tab Workspace)
 # ---------------------------------------------------------------------------
-tab1, tab2, tab3, tab4 = st.tabs(
-    [
-        "① Add Participants & Template",
-        "② Generate Certificates",
-        "③ Sending Formalities",
-        "④ Delivery Report & Analytics",
-    ]
-)
+is_admin = st.session_state.get("user_role", "creator") == "admin"
+tab_titles = [
+    "① Add Participants & Template",
+    "② Generate Certificates",
+    "③ Sending Formalities",
+    "④ Delivery Report & Vault",
+    "⑤ 📊 Automation Dashboard",
+]
+if is_admin:
+    tab_titles.append("⑥ 👥 User Accounts & Access")
+
+all_tabs = st.tabs(tab_titles)
+tab1, tab2, tab3, tab4, tab5 = all_tabs[0], all_tabs[1], all_tabs[2], all_tabs[3], all_tabs[4]
+tab6 = all_tabs[5] if is_admin else None
 
 # ===========================================================================
 # TAB 1 — Add Participants & Template
@@ -2182,22 +2226,36 @@ with tab4:
 
         vb1, vb2 = st.columns(2)
         with vb1:
-            vault_files = [ensure_cert_pdf_exists(r) for r in vault_records]
-            existing_vault_files = [p for p in vault_files if os.path.exists(p)]
+            existing_vault_files = []
+            for r in vault_records:
+                vp = os.path.join(VAULT_DIR, f"{r.cert_number}.pdf")
+                cp = os.path.join(CERT_DIR, f"{r.cert_number}.pdf")
+                if os.path.exists(vp):
+                    existing_vault_files.append(vp)
+                elif os.path.exists(cp):
+                    existing_vault_files.append(cp)
+
             if existing_vault_files:
                 v_zbuf = io.BytesIO()
                 with zipfile.ZipFile(v_zbuf, "w", zipfile.ZIP_DEFLATED) as vzf:
                     for p in existing_vault_files:
                         vzf.write(p, arcname=os.path.basename(p))
                 st.download_button(
-                    "📦 Download Entire Vault Archive (.zip)",
+                    f"📦 Download Available Vault Archive ({len(existing_vault_files)} PDFs) (.zip)",
                     data=v_zbuf.getvalue(),
                     file_name="All_Issued_Certificates_Vault.zip",
                     mime="application/zip",
                     use_container_width=True,
                 )
             else:
-                st.button("📦 Download Entire Vault Archive (.zip)", disabled=True, use_container_width=True)
+                if st.button("🔨 Generate Missing Vault PDFs", use_container_width=True):
+                    gen_cnt = 0
+                    for r in vault_records:
+                        res = ensure_cert_pdf_exists(r)
+                        if res:
+                            gen_cnt += 1
+                    st.success(f"✓ Reconstructed {gen_cnt} vault PDFs.")
+                    st.rerun()
         with vb2:
             v_csv = v_df.to_csv(index=False).encode("utf-8")
             st.download_button("⬇️ Export Registry Ledger (CSV)", data=v_csv, file_name="Master_Certificate_Registry.csv", mime="text/csv", use_container_width=True)
@@ -2205,3 +2263,186 @@ with tab4:
         st.info("No certificates in permanent vault yet. Generated certificates will automatically be preserved here forever.")
 
     card_end()
+
+
+# ===========================================================================
+# TAB 5 — Automation Dashboard (Embedded & Authenticated)
+# ===========================================================================
+with tab5:
+    card_start("📊 Certificate Automation Dashboard", "Live status of background cert_store automation, delivery status, and skipped rows.")
+
+    c_r1, c_r2 = st.columns([1.5, 3.5])
+    with c_r1:
+        if st.button("🔄 Refresh Dashboard", key="btn_refresh_dashboard", use_container_width=True):
+            st.rerun()
+
+    records_auto = cert_store.list_all_certificates()
+    skipped_auto = cert_store.list_skipped_rows()
+
+    total_auto = len(records_auto)
+    sent_auto = sum(1 for r in records_auto if r.email_status == "SENT")
+    failed_auto = sum(1 for r in records_auto if r.email_status == "FAILED")
+    pending_auto = sum(1 for r in records_auto if r.email_status == "PENDING")
+
+    col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
+    col_m1.metric("Total Issued", total_auto)
+    col_m2.metric("✅ Delivered", sent_auto)
+    col_m3.metric("❌ Failed", failed_auto)
+    col_m4.metric("⏳ Pending", pending_auto)
+    col_m5.metric("⚠️ Skipped Rows", len(skipped_auto))
+
+    st.markdown("---")
+
+    if failed_auto:
+        st.subheader("❌ Failed Deliveries (Will Auto-Retry)")
+        failed_rows = [
+            {
+                "Name": r.name,
+                "Email": r.email,
+                "Certificate No": r.cert_number,
+                "Last Attempt": r.last_attempt_at,
+                "Error Details": r.last_error,
+            }
+            for r in records_auto
+            if r.email_status == "FAILED"
+        ]
+        st.dataframe(pd.DataFrame(failed_rows), use_container_width=True, hide_index=True)
+    else:
+        st.success("✅ No failed deliveries currently.")
+
+    if skipped_auto:
+        st.subheader("⚠️ Skipped Sheet Rows (Needs Manual Attention)")
+        st.dataframe(pd.DataFrame(skipped_auto), use_container_width=True, hide_index=True)
+
+    st.subheader("📜 All Automated Records")
+    if records_auto:
+        all_auto_rows = [
+            {
+                "Name": r.name,
+                "Email": r.email,
+                "Certificate No": r.cert_number,
+                "Delivery Status": r.email_status,
+                "Send Count": r.send_count,
+                "Last Sent": r.last_sent_at,
+                "Issued At": r.created_at,
+            }
+            for r in records_auto
+        ]
+        st.dataframe(pd.DataFrame(all_auto_rows), use_container_width=True, hide_index=True)
+    else:
+        st.info("No automated records found yet.")
+
+    card_end()
+
+
+# ===========================================================================
+# TAB 6 — User Accounts & Access Management (Admin Only)
+# ===========================================================================
+if tab6:
+    with tab6:
+        card_start("👥 User Accounts & Team Access Management", "Create and manage authorized staff accounts for certificate generation.")
+
+        # Sub-section 1: Create New User
+        st.markdown("##### ➕ Create New Team Member Account")
+        with st.form("create_user_form", clear_on_submit=True):
+            cu1, cu2 = st.columns(2)
+            with cu1:
+                new_uname = st.text_input("Username *", placeholder="e.g. rahul_staff or staff1")
+                new_fname = st.text_input("Full Name", placeholder="e.g. Rahul Sharma")
+            with cu2:
+                new_pwd = st.text_input("Password *", type="password", placeholder="At least 6 characters")
+                new_role = st.selectbox(
+                    "Account Role",
+                    options=["Certificate Creator (Generate & Send)", "Administrator (Full Access & User Management)"],
+                    index=0,
+                )
+
+            cu_submit = st.form_submit_button("➕ Create Account", use_container_width=True)
+            if cu_submit:
+                role_code = "admin" if "Admin" in new_role else "creator"
+                ok, msg = cert_store.create_user(
+                    username=new_uname,
+                    password=new_pwd,
+                    full_name=new_fname,
+                    role=role_code,
+                )
+                if ok:
+                    st.success(f"✓ {msg}")
+                    st.rerun()
+                else:
+                    st.error(f"❌ {msg}")
+
+        st.markdown("---")
+
+        # Sub-section 2: Active Accounts List & Actions
+        st.markdown("##### 📋 Existing Registered Accounts")
+        users_list = cert_store.list_users()
+
+        if users_list:
+            u_df = pd.DataFrame([
+                {
+                    "Username": u["username"],
+                    "Full Name": u["full_name"] or "—",
+                    "Role": "👑 Administrator" if u["role"] == "admin" else "👤 Creator",
+                    "Status": "✅ Active" if u["is_active"] else "⛔ Deactivated",
+                    "Created At": u["created_at"][:10] if u.get("created_at") else "—",
+                    "Last Login": u["last_login_at"][:19].replace("T", " ") if u.get("last_login_at") else "Never",
+                }
+                for u in users_list
+            ])
+            st.dataframe(u_df, use_container_width=True, hide_index=True)
+
+            # Individual Account Management Tools
+            st.markdown("##### ⚙️ Manage Individual Account")
+            sel_user = st.selectbox(
+                "Select User to Manage",
+                options=[u["username"] for u in users_list],
+                key="manage_user_select",
+            )
+            target_user = next((u for u in users_list if u["username"] == sel_user), None)
+
+            if target_user:
+                curr_logged_in = st.session_state.get("current_user", "")
+                m_col1, m_col2, m_col3 = st.columns(3)
+
+                # Reset Password
+                with m_col1:
+                    with st.expander(f"🔑 Reset Password for {sel_user}", expanded=False):
+                        with st.form(f"reset_pwd_form_{sel_user}"):
+                            new_pass_input = st.text_input("New Password", type="password")
+                            if st.form_submit_button("Update Password", use_container_width=True):
+                                p_ok, p_msg = cert_store.update_user_password(sel_user, new_pass_input)
+                                if p_ok:
+                                    st.success(f"✓ {p_msg}")
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ {p_msg}")
+
+                # Toggle Activate / Deactivate
+                with m_col2:
+                    is_active_now = bool(target_user["is_active"])
+                    toggle_btn_label = "⛔ Deactivate Account" if is_active_now else "✅ Activate Account"
+                    if st.button(toggle_btn_label, key=f"toggle_user_{sel_user}", use_container_width=True):
+                        t_ok, t_msg = cert_store.toggle_user_status(sel_user, not is_active_now, current_user=curr_logged_in)
+                        if t_ok:
+                            st.success(f"✓ {t_msg}")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {t_msg}")
+
+                # Delete Account
+                with m_col3:
+                    if sel_user.lower() == curr_logged_in.lower():
+                        st.button("🗑️ Delete Account", disabled=True, help="You cannot delete your own active account", use_container_width=True)
+                    else:
+                        with st.expander(f"🗑️ Delete {sel_user}", expanded=False):
+                            st.warning(f"Are you sure you want to permanently delete user '{sel_user}'?")
+                            if st.button("Confirm Delete", key=f"conf_del_{sel_user}", use_container_width=True):
+                                d_ok, d_msg = cert_store.delete_user(sel_user, current_user=curr_logged_in)
+                                if d_ok:
+                                    st.success(f"✓ {d_msg}")
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ {d_msg}")
+
+        card_end()
