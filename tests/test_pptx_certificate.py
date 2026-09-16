@@ -42,7 +42,21 @@ def test_fill_certificate_text_raises_on_missing_template_field(tmp_path):
         pc.fill_certificate_text(prs, name="X", certificate_number="Y", completion_date="Z")
 
 
-@pytest.mark.skipif(shutil.which("soffice") is None, reason="LibreOffice ('soffice') is required on PATH")
+def _can_convert_pptx():
+    if shutil.which("soffice") is not None:
+        return True
+    if sys.platform.startswith("win"):
+        try:
+            import win32com.client
+            ppt = win32com.client.Dispatch("PowerPoint.Application")
+            ppt.Quit()
+            return True
+        except Exception:
+            return False
+    return False
+
+
+@pytest.mark.skipif(not _can_convert_pptx(), reason="Neither LibreOffice ('soffice') nor PowerPoint COM is available")
 def test_render_certificate_pdf_end_to_end(tmp_path):
     qr_path = tmp_path / "qr.png"
     qr_path.write_bytes(qr_utils.make_qr_image_bytes("https://example.com/verify/DVA-APIDS-2026-000999"))

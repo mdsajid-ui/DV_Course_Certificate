@@ -663,6 +663,15 @@ with st.sidebar:
             "in Streamlit secrets or environment variables."
         )
 
+    st.markdown("### ☁️ Cloud Object Storage")
+    import s3_service
+    s3_storage = s3_service.get_s3_storage()
+    if s3_storage.is_configured():
+        st.markdown('<span class="dv-badge dv-badge-ok">● S3 Storage Active</span>', unsafe_allow_html=True)
+        st.caption(f"**Bucket:** `{s3_storage.bucket}`\n**Storage Path:** `certificates/2026/`")
+    else:
+        st.markdown('<span class="dv-badge dv-badge-warn">● S3 Not Connected</span>', unsafe_allow_html=True)
+
     st.divider()
     st.markdown("### 📊 Active Roster Summary")
     st.metric("Participants Loaded", len(st.session_state.records))
@@ -1587,11 +1596,15 @@ with tab2:
 
             review_rows = []
             for k, info in st.session_state.cert_paths.items():
+                c_no = info.get("CertNumber")
+                rec_db = cert_store.get_by_cert_number(c_no) if c_no and c_no != "Error" else None
+                s3_str = f"☁️ {rec_db.s3_key}" if rec_db and rec_db.s3_key else ("☁️ Uploaded" if info.get("Path") else "Pending")
                 review_rows.append({
                     "Student Name": info.get("Name"),
                     "Email ID": info.get("Email"),
                     "Course": info.get("Course"),
                     "Certificate Number": info.get("CertNumber"),
+                    "S3 Storage Path": s3_str,
                     "Security Protection": "🔒 Pixel-Locked 300 DPI · AES-256 Zero-Permission",
                     "Status": "✅ Ready & Locked" if info.get("Path") else f"❌ {info.get('Status')}",
                 })

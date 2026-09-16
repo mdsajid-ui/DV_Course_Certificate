@@ -82,11 +82,35 @@ class S3CertificateStorage:
         expiry_seconds: Optional[int] = None,
         signing_secret: Optional[str] = None,
     ):
-        self.endpoint_url = (endpoint_url or get_secret("AWS_S3_ENDPOINT_URL", "")).strip() or None
-        self.access_key = (access_key or get_secret("AWS_ACCESS_KEY_ID", "")).strip()
-        self.secret_key = (secret_key or get_secret("AWS_SECRET_ACCESS_KEY", "")).strip()
-        self.bucket = (bucket or get_secret("AWS_S3_BUCKET", "b1storage")).strip()
-        self.region = (region or get_secret("AWS_REGION", "us-east-1")).strip()
+        self.endpoint_url = (
+            endpoint_url
+            or get_secret("AWS_S3_ENDPOINT_URL", "")
+            or "https://t8fcc.upcloudobjects.com"
+        ).strip() or None
+
+        self.access_key = (
+            access_key
+            or get_secret("AWS_ACCESS_KEY_ID", "")
+            or "AKIA9C40CA33EAD0E955"
+        ).strip()
+
+        self.secret_key = (
+            secret_key
+            or get_secret("AWS_SECRET_ACCESS_KEY", "")
+            or "+gON42vkL6/qUWS6RpvVL/GLNUjwocRztPn6elPv"
+        ).strip()
+
+        self.bucket = (
+            bucket
+            or get_secret("AWS_S3_BUCKET", "")
+            or "b1storage"
+        ).strip()
+
+        self.region = (
+            region
+            or get_secret("AWS_REGION", "")
+            or "us-east-1"
+        ).strip()
         
         raw_expiry = expiry_seconds or get_secret("S3_PRESIGNED_EXPIRY_SECONDS", "3600")
         try:

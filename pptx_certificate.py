@@ -51,6 +51,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
@@ -193,6 +194,28 @@ def _add_qr_to_slide(prs: Presentation, qr_png_path: str, certificate_number: st
     )
 
 
+def _convert_pptx_to_pdf_powerpoint(pptx_abs_path: str, pdf_abs_path: str) -> None:
+    """Converts a PowerPoint presentation to PDF using native Windows PowerPoint COM automation."""
+    import win32com.client
+    ppt = None
+    deck = None
+    try:
+        ppt = win32com.client.Dispatch("PowerPoint.Application")
+        deck = ppt.Presentations.Open(pptx_abs_path, WithWindow=False)
+        deck.SaveAs(pdf_abs_path, 32)
+    finally:
+        if deck is not None:
+            try:
+                deck.Close()
+            except Exception:
+                pass
+        if ppt is not None:
+            try:
+                ppt.Quit()
+            except Exception:
+                pass
+
+
 def render_certificate_pdf(
     *,
     name: str,
@@ -204,15 +227,17 @@ def render_certificate_pdf(
 ) -> str:
     """
     Fills the template and produces a final PDF at `output_pdf_path`.
-    Requires LibreOffice (`soffice`) on PATH for the pptx->pdf conversion —
-    same dependency the rest of this deployment already needs for nothing
-    else, so document it in README/requirements if you deploy this
-    separately from a machine that has it.
+    Uses LibreOffice (`soffice`) on PATH when available (e.g. Linux / Cloud),
+    or falls back to Microsoft PowerPoint COM automation on Windows.
     """
     template_path = template_path or DEFAULT_TEMPLATE_PATH
     if not os.path.exists(template_path):
         raise FileNotFoundError(f"Certificate template not found: {template_path}")
-    if shutil.which("soffice") is None:
+
+    has_soffice = shutil.which("soffice") is not None
+    is_windows = sys.platform.startswith("win")
+
+    if not has_soffice and not is_windows:
         raise RuntimeError(
             "LibreOffice ('soffice') is required to convert the filled certificate "
             "to PDF but was not found on PATH. Install libreoffice (or "
@@ -223,22 +248,31 @@ def render_certificate_pdf(
     fill_certificate_text(prs, name=name, certificate_number=certificate_number, completion_date=completion_date)
     _add_qr_to_slide(prs, qr_png_path, certificate_number)
 
+    os.makedirs(os.path.dirname(output_pdf_path) or ".", exist_ok=True)
+
     with tempfile.TemporaryDirectory() as tmpdir:
         filled_pptx = os.path.join(tmpdir, "filled.pptx")
         prs.save(filled_pptx)
 
-        result = subprocess.run(
-            ["soffice", "--headless", "--convert-to", "pdf", "--outdir", tmpdir, filled_pptx],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        produced = os.path.join(tmpdir, "filled.pdf")
-        if result.returncode != 0 or not os.path.exists(produced):
-            raise RuntimeError(f"LibreOffice conversion failed: {result.stdout}\n{result.stderr}")
-
-        os.makedirs(os.path.dirname(output_pdf_path) or ".", exist_ok=True)
-        shutil.copyfile(produced, output_pdf_path)
+        if has_soffice:
+            result = subprocess.run(
+                ["soffice", "--headless", "--convert-to", "pdf", "--outdir", tmpdir, filled_pptx],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            produced = os.path.join(tmpdir, "filled.pdf")
+            if result.returncode != 0 or not os.path.exists(produced):
+                raise RuntimeError(f"LibreOffice conversion failed: {result.stdout}\n{result.stderr}")
+            shutil.copyfile(produced, output_pdf_path)
+        elif is_windows:
+            try:
+                _convert_pptx_to_pdf_powerpoint(os.path.abspath(filled_pptx), os.path.abspath(output_pdf_path))
+            except Exception as e:
+                raise RuntimeError(
+                    f"LibreOffice ('soffice') is not installed, and PowerPoint COM conversion failed: {e}. "
+                    f"Please install LibreOffice or Microsoft PowerPoint."
+                )
 
     # Apply digital encryption, permission lock & calculate SHA-256 seal
     try:
