@@ -42,21 +42,6 @@ def test_fill_certificate_text_raises_on_missing_template_field(tmp_path):
         pc.fill_certificate_text(prs, name="X", certificate_number="Y", completion_date="Z")
 
 
-def _can_convert_pptx():
-    if shutil.which("soffice") is not None:
-        return True
-    if sys.platform.startswith("win"):
-        try:
-            import win32com.client
-            ppt = win32com.client.Dispatch("PowerPoint.Application")
-            ppt.Quit()
-            return True
-        except Exception:
-            return False
-    return False
-
-
-@pytest.mark.skipif(not _can_convert_pptx(), reason="Neither LibreOffice ('soffice') nor PowerPoint COM is available")
 def test_render_certificate_pdf_end_to_end(tmp_path):
     qr_path = tmp_path / "qr.png"
     qr_path.write_bytes(qr_utils.make_qr_image_bytes("https://example.com/verify/DVA-APIDS-2026-000999"))
@@ -71,6 +56,24 @@ def test_render_certificate_pdf_end_to_end(tmp_path):
     )
     assert out_path.exists()
     assert out_path.stat().st_size > 10_000  # sanity: not an empty/broken PDF
+
+
+def test_render_certificate_pdf_pillow_direct(tmp_path):
+    qr_path = tmp_path / "qr.png"
+    qr_path.write_bytes(qr_utils.make_qr_image_bytes("https://example.com/verify/DVA-APDA-2026-000100"))
+    out_path = tmp_path / "cert_apda.pdf"
+
+    template = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "templates", "certificate_APDA_blank.pptx")
+    pc.render_certificate_pdf_pillow(
+        name="Ananya Sen",
+        certificate_number="DVA-APDA-2026-000100",
+        completion_date="15-08-2026",
+        qr_png_path=str(qr_path),
+        template_path=template,
+        output_pdf_path=str(out_path),
+    )
+    assert out_path.exists()
+    assert out_path.stat().st_size > 10_000
 
 
 def test_qr_encodes_the_correct_verify_url():
