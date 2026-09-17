@@ -235,7 +235,8 @@ def render_certificate_pdf(
     if not os.path.exists(template_path):
         raise FileNotFoundError(f"Certificate template not found: {template_path}")
 
-    has_soffice = shutil.which("soffice") is not None
+    soffice_bin = shutil.which("soffice") or shutil.which("libreoffice")
+    has_soffice = soffice_bin is not None
     is_windows = sys.platform.startswith("win")
 
     if not has_soffice and not is_windows:
@@ -269,10 +270,14 @@ def render_certificate_pdf(
             lo_env["XDG_CONFIG_HOME"] = os.path.join(tmpdir, "config")
             lo_env["XDG_CACHE_HOME"] = os.path.join(tmpdir, "cache")
             lo_env["XDG_DATA_HOME"] = os.path.join(tmpdir, "data")
-            lo_env["SAL_USE_VCLPLUGIN"] = "gen"
+            # Force headless SVP (Sal Virtual Plugin) and remove any DISPLAY variables
+            # so LibreOffice never attempts to open an X11/Wayland display on a headless server.
+            lo_env["SAL_USE_VCLPLUGIN"] = "svp"
+            lo_env.pop("DISPLAY", None)
+            lo_env.pop("WAYLAND_DISPLAY", None)
 
             cmd = [
-                "soffice",
+                soffice_bin or "soffice",
                 "--headless",
                 f"-env:UserInstallation={profile_uri}",
                 "--nodefault",
