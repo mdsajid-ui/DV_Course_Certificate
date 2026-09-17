@@ -135,3 +135,25 @@ def test_delete_certificate_and_test_cleanup(tmp_path):
     ok = cs.delete_certificate(rec2.cert_number)
     assert ok is True
     assert cs.get_by_cert_number(rec2.cert_number) is None
+
+
+def test_system_settings_persistence(tmp_path):
+    cs = _fresh_store(tmp_path)
+    # Default settings seeded
+    assert cs.get_system_setting("smtp_username") == "md.sajid@dvdataanalytics.com"
+    assert cs.get_system_setting("smtp_password") == "Mdsajid@#$123"
+
+    # Update single setting
+    cs.set_system_setting("smtp_password", "NewSecretPass!23")
+    assert cs.get_system_setting("smtp_password") == "NewSecretPass!23"
+
+    # Bulk update
+    cs.set_system_settings_bulk({
+        "smtp_host": "mail.customserver.com",
+        "smtp_port": "465",
+    })
+    assert cs.get_system_setting("smtp_host") == "mail.customserver.com"
+    assert cs.get_system_setting("smtp_port") == "465"
+    all_s = cs.get_all_system_settings()
+    assert all_s["smtp_host"] == "mail.customserver.com"
+

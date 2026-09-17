@@ -42,6 +42,46 @@ def get_secret(name: str, default=None):
     return os.environ.get(name, default)
 
 
+def update_env_file(key_values: dict) -> None:
+    """Updates or adds key-value pairs to the local .env file and in os.environ."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    env_path = os.path.join(base_dir, ".env")
+    lines = []
+    if os.path.exists(env_path):
+        try:
+            with open(env_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        except Exception:
+            lines = []
+
+    written_keys = set()
+    new_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            k, _ = stripped.split("=", 1)
+            k = k.strip()
+            if k in key_values:
+                new_lines.append(f"{k}={key_values[k]}\n")
+                written_keys.add(k)
+                os.environ[k] = str(key_values[k])
+                continue
+        new_lines.append(line)
+
+    for k, v in key_values.items():
+        if k not in written_keys:
+            if new_lines and not new_lines[-1].endswith("\n"):
+                new_lines.append("\n")
+            new_lines.append(f"{k}={v}\n")
+            os.environ[k] = str(v)
+
+    try:
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.writelines(new_lines)
+    except Exception:
+        pass
+
+
 def setup_logger() -> logging.Logger:
     logger = logging.getLogger("cert_email_app")
     logger.setLevel(logging.INFO)

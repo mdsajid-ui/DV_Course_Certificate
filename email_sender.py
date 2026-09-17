@@ -34,16 +34,54 @@ class SMTPConfig:
         except Exception:
             sess_smtp = {}
 
-        self.host = host or sess_smtp.get("host") or get_secret("SMTP_HOST", "smtp.office365.com")
-        raw_port = port or sess_smtp.get("port") or get_secret("SMTP_PORT", "587")
+        db_settings = {}
+        try:
+            from cert_store import get_system_setting
+            db_settings = {
+                "host": get_system_setting("smtp_host"),
+                "port": get_system_setting("smtp_port"),
+                "username": get_system_setting("smtp_username"),
+                "password": get_system_setting("smtp_password"),
+                "sender_name": get_system_setting("smtp_sender_name"),
+            }
+        except Exception:
+            db_settings = {}
+
+        self.host = (
+            host
+            or sess_smtp.get("host")
+            or db_settings.get("host")
+            or get_secret("SMTP_HOST", "smtp.office365.com")
+        )
+        raw_port = (
+            port
+            or sess_smtp.get("port")
+            or db_settings.get("port")
+            or get_secret("SMTP_PORT", "587")
+        )
         try:
             self.port = int(raw_port)
         except (ValueError, TypeError):
             self.port = 587
 
-        self.username = (username or sess_smtp.get("username") or get_secret("SMTP_EMAIL", "md.sajid@dvdataanalytics.com")).strip()
-        self.password = (password or sess_smtp.get("password") or get_secret("SMTP_PASSWORD", "")).strip()
-        self.sender_name = sender_name or sess_smtp.get("sender_name") or get_secret("SMTP_SENDER_NAME", "DV Analytics Team")
+        self.username = (
+            username
+            or sess_smtp.get("username")
+            or db_settings.get("username")
+            or get_secret("SMTP_EMAIL", "md.sajid@dvdataanalytics.com")
+        ).strip()
+        self.password = (
+            password
+            or sess_smtp.get("password")
+            or db_settings.get("password")
+            or get_secret("SMTP_PASSWORD", "Mdsajid@#$123")
+        ).strip()
+        self.sender_name = (
+            sender_name
+            or sess_smtp.get("sender_name")
+            or db_settings.get("sender_name")
+            or get_secret("SMTP_SENDER_NAME", "DV Analytics Team")
+        )
 
     def is_configured(self) -> bool:
         return bool(self.username and self.password)

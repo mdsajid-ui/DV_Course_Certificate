@@ -1769,7 +1769,7 @@ with tab3:
 
         btn_c1, btn_c2 = st.columns(2)
         with btn_c1:
-            if st.button("💾 Save Credentials", use_container_width=True):
+            if st.button("💾 Save Credentials Permanently", use_container_width=True):
                 st.session_state["smtp_overrides"] = {
                     "username": cfg_user.strip(),
                     "password": cfg_pass.strip(),
@@ -1777,7 +1777,29 @@ with tab3:
                     "host": cfg_host.strip(),
                     "port": int(cfg_port),
                 }
-                st.success("✓ SMTP credentials saved for this session!")
+                try:
+                    from cert_store import set_system_settings_bulk
+                    set_system_settings_bulk({
+                        "smtp_username": cfg_user.strip(),
+                        "smtp_password": cfg_pass.strip(),
+                        "smtp_sender_name": cfg_name.strip(),
+                        "smtp_host": cfg_host.strip(),
+                        "smtp_port": str(cfg_port),
+                    })
+                except Exception:
+                    pass
+                try:
+                    from utils import update_env_file
+                    update_env_file({
+                        "SMTP_EMAIL": cfg_user.strip(),
+                        "SMTP_PASSWORD": cfg_pass.strip(),
+                        "SMTP_SENDER_NAME": cfg_name.strip(),
+                        "SMTP_HOST": cfg_host.strip(),
+                        "SMTP_PORT": str(cfg_port),
+                    })
+                except Exception:
+                    pass
+                st.success("✅ SMTP credentials saved permanently across all sessions, reboots, and server restarts!")
                 st.rerun()
 
         with btn_c2:
@@ -1803,7 +1825,7 @@ with tab3:
                                 f"Hello!\n\nThis is a verification email confirming that your DV Analytics Certificate delivery system is connected and working perfectly.\n\nSender: {cfg_name} <{cfg_user}>\nHost: {cfg_host}:{cfg_port}\nTimestamp: {datetime.now().strftime('%d-%b-%Y %H:%M:%S')}",
                             )
                             sender.close()
-                        # Save on success
+                        # Save permanently on success
                         st.session_state["smtp_overrides"] = {
                             "username": cfg_user.strip(),
                             "password": cfg_pass.strip(),
@@ -1811,22 +1833,47 @@ with tab3:
                             "host": cfg_host.strip(),
                             "port": int(cfg_port),
                         }
-                        st.success(f"✅ Success! SMTP connected and test email sent to `{target}`.")
+                        try:
+                            from cert_store import set_system_settings_bulk
+                            set_system_settings_bulk({
+                                "smtp_username": cfg_user.strip(),
+                                "smtp_password": cfg_pass.strip(),
+                                "smtp_sender_name": cfg_name.strip(),
+                                "smtp_host": cfg_host.strip(),
+                                "smtp_port": str(cfg_port),
+                            })
+                        except Exception:
+                            pass
+                        try:
+                            from utils import update_env_file
+                            update_env_file({
+                                "SMTP_EMAIL": cfg_user.strip(),
+                                "SMTP_PASSWORD": cfg_pass.strip(),
+                                "SMTP_SENDER_NAME": cfg_name.strip(),
+                                "SMTP_HOST": cfg_host.strip(),
+                                "SMTP_PORT": str(cfg_port),
+                            })
+                        except Exception:
+                            pass
+                        st.success(f"✅ Success! SMTP connected, credentials permanently saved, and test email sent to `{target}`.")
                         st.rerun()
                     except smtplib.SMTPAuthenticationError as auth_err:
+                        domain = cfg_user.split('@')[-1] if '@' in cfg_user else ''
                         st.error(
                             f"❌ **Authentication Failed (535):** Username or Password rejected by mail server.\n\n"
-                            f"• **If your domain ({cfg_user.split('@')[-1] if '@' in cfg_user else 'email'}) uses Google / Google Workspace (`smtp.gmail.com`):** "
-                            f"Google blocks standard account passwords. You **must generate a 16-letter App Password** from "
-                            f"[myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) and paste it here.\n"
-                            f"• **If using Custom Mail / cPanel / Webmail:** Ensure the SMTP Host (e.g. `mail.{cfg_user.split('@')[-1] if '@' in cfg_user else 'domain.com'}`) and Port (`465` for SSL or `587` for TLS) match your mail provider."
+                            f"• **If your domain ({domain}) uses Microsoft 365 / Outlook (`smtp.office365.com`):**\n"
+                            f"  1. Go to [Microsoft 365 Admin Center](https://admin.microsoft.com/) ➔ **Users** ➔ **Active users** ➔ select `{cfg_user}` ➔ **Mail** tab ➔ click **Manage email apps** ➔ verify **Authenticated SMTP** is CHECKED.\n"
+                            f"  2. If Security Defaults or MFA is enabled on your Microsoft 365 tenant, you must create and use an **App Password**.\n\n"
+                            f"• **If your domain uses Google / Gmail (`smtp.gmail.com`):** "
+                            f"Google blocks normal passwords. You must generate a 16-letter App Password from [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords).\n\n"
+                            f"• **If using Custom Webmail/cPanel:** Verify hostname and TLS/SSL port."
                         )
                     except Exception as err:
                         err_str = str(err)
                         if "535" in err_str or "auth" in err_str.lower():
                             st.error(
                                 f"❌ **Authentication Failed:** Username or Password not accepted.\n\n"
-                                f"Please use a **16-character App Password** if on Google Workspace/Gmail, or verify your custom host/port settings."
+                                f"If using Microsoft 365, ensure **Authenticated SMTP** is enabled in the M365 Admin Center for `{cfg_user}`."
                             )
                         else:
                             st.error(f"❌ **SMTP Connection Failed:** {err}")

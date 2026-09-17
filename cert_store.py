@@ -184,6 +184,29 @@ def init_db() -> None:
                 ("sk", _hash_password("cBi19rabI7Ogl8HFjJKjEZDH"), "SK Abdul Sajid", "admin", now),
             )
 
+        # Persistent system settings (e.g. SMTP config, email sender parameters)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS system_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
+        default_settings = {
+            "smtp_host": "smtp.office365.com",
+            "smtp_port": "587",
+            "smtp_username": "md.sajid@dvdataanalytics.com",
+            "smtp_password": "Mdsajid@#$123",
+            "smtp_sender_name": "DV Analytics Team",
+        }
+        for k, v in default_settings.items():
+            conn.execute(
+                "INSERT OR IGNORE INTO system_settings (key, value, updated_at) VALUES (?, ?, ?)",
+                (k, v, now),
+            )
+
 
 def _normalize(s: str) -> str:
     s = unicodedata.normalize("NFKC", s or "").strip().lower()
@@ -863,4 +886,58 @@ def toggle_user_status(username: str, is_active: bool, current_user: str = "") -
             status_txt = "activated" if is_active else "deactivated"
             return True, f"User '{u_clean}' {status_txt}."
         return False, f"User '{u_clean}' not found."
+
+
+def get_system_setting(key: str, default: Optional[str] = None) -> Optional[str]:
+    """Retrieves a persistent system configuration setting from SQLite."""
+    init_db()
+    with _connect() as conn:
+        row = conn.execute("SELECT value FROM system_settings WHERE key = ?", (key,)).fetchone()
+        if row and row["value"] is not None:
+            return row["value"]
+    return default
+
+
+def set_system_setting(key: str, value: str) -> None:
+    """Saves or updates a persistent system configuration setting in SQLite."""
+    init_db()
+    now = datetime.now(timezone.utc).isoformat()
+    with _lock, _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO system_settings (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = excluded.updated_at
+            """,
+            (key, str(value), now),
+        )
+
+
+def set_system_settings_bulk(settings: Dict[str, str]) -> None:
+    """Saves multiple system settings at once atomically."""
+    init_db()
+    now = datetime.now(timezone.utc).isoformat()
+    with _lock, _connect() as conn:
+        for k, v in settings.items():
+            conn.execute(
+                """
+                INSERT INTO system_settings (key, value, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = excluded.updated_at
+                """,
+                (k, str(v), now),
+            )
+
+
+def get_all_system_settings() -> Dict[str, str]:
+    """Returns all system settings as a key-value dictionary."""
+    init_db()
+    with _connect() as conn:
+        rows = conn.execute("SELECT key, value FROM system_settings").fetchall()
+        return {r["key"]: r["value"] for r in rows}
+
 
