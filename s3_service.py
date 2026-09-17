@@ -82,34 +82,53 @@ class S3CertificateStorage:
         expiry_seconds: Optional[int] = None,
         signing_secret: Optional[str] = None,
     ):
-        self.endpoint_url = (
+        db_endpoint = None
+        db_access_key = None
+        db_secret_key = None
+        db_bucket = None
+        db_region = None
+        try:
+            from cert_store import get_system_setting
+            db_endpoint = get_system_setting("s3_endpoint_url")
+            db_access_key = get_system_setting("s3_access_key")
+            db_secret_key = get_system_setting("s3_secret_key")
+            db_bucket = get_system_setting("s3_bucket")
+            db_region = get_system_setting("s3_region")
+        except Exception:
+            pass
+
+        raw_endpoint = (
             endpoint_url
-            or get_secret("AWS_S3_ENDPOINT_URL", "")
-            or "https://t8fcc.upcloudobjects.com"
-        ).strip() or None
+            if endpoint_url is not None
+            else (db_endpoint if db_endpoint is not None else get_secret("AWS_S3_ENDPOINT_URL", ""))
+        )
+        if raw_endpoint is None or str(raw_endpoint).strip().lower() in ("none", "null", "aws", "amazon", ""):
+            self.endpoint_url = None
+        else:
+            self.endpoint_url = str(raw_endpoint).strip()
 
         self.access_key = (
             access_key
-            or get_secret("AWS_ACCESS_KEY_ID", "")
-            or "AKIA9C40CA33EAD0E955"
+            if access_key is not None
+            else (db_access_key if db_access_key is not None else get_secret("AWS_ACCESS_KEY_ID", "AKIA9C40CA33EAD0E955"))
         ).strip()
 
         self.secret_key = (
             secret_key
-            or get_secret("AWS_SECRET_ACCESS_KEY", "")
-            or "+gON42vkL6/qUWS6RpvVL/GLNUjwocRztPn6elPv"
+            if secret_key is not None
+            else (db_secret_key if db_secret_key is not None else get_secret("AWS_SECRET_ACCESS_KEY", "+gON42vkL6/qUWS6RpvVL/GLNUjwocRztPn6elPv"))
         ).strip()
 
         self.bucket = (
             bucket
-            or get_secret("AWS_S3_BUCKET", "")
-            or "b1storage"
+            if bucket is not None
+            else (db_bucket if db_bucket is not None else get_secret("AWS_S3_BUCKET", "b1storage"))
         ).strip()
 
         self.region = (
             region
-            or get_secret("AWS_REGION", "")
-            or "us-east-1"
+            if region is not None
+            else (db_region if db_region is not None else get_secret("AWS_REGION", "us-east-1"))
         ).strip()
         
         raw_expiry = expiry_seconds or get_secret("S3_PRESIGNED_EXPIRY_SECONDS", "3600")
@@ -213,18 +232,51 @@ class S3CertificateStorage:
             with open(local_pdf_path, "rb") as f:
                 pdf_bytes = f.read()
 
-            client.put_object(
-                Bucket=self.bucket,
-                Key=s3_key,
-                Body=pdf_bytes,
-                ContentType="application/pdf",
-                ACL="private",
-            )
+            put_kwargs: Dict[str, Any] = {
+                "Bucket": self.bucket,
+                "Key": s3_key,
+                "Body": pdf_bytes,
+                "ContentType": "application/pdf",
+            }
+            try:
+                client.put_object(**put_kwargs)
+            except ClientError as ce:
+                # If provider requires an ACL, retry with ACL='private'
+                if "AccessControlListNotSupported" not in str(ce):
+                    try:
+                        client.put_object(**put_kwargs, ACL="private")
+                    except Exception:
+                        raise ce
+                else:
+                    raise ce
+
             logger.info("Successfully uploaded certificate to S3: %s", s3_key)
             return s3_key
         except (ClientError, BotoCoreError, Exception) as e:
             logger.error("Failed to upload certificate to S3 [key=%s]: %s", s3_key, e, exc_info=True)
             raise S3UploadError(f"S3 certificate upload failed: {e}") from e
+
+    def test_connection(self) -> tuple[bool, str]:
+        """
+        Tests read and write capabilities on the configured S3 bucket.
+        Returns (success: bool, message: str).
+        """
+        if not self.is_configured():
+            return False, "S3 storage is not fully configured. Bucket, Access Key, and Secret Key are required."
+        try:
+            client = self.get_client()
+            test_key = ".s3_connectivity_probe.txt"
+            client.put_object(
+                Bucket=self.bucket,
+                Key=test_key,
+                Body=b"DV Analytics S3 Connectivity Probe OK",
+                ContentType="text/plain",
+            )
+            client.delete_object(Bucket=self.bucket, Key=test_key)
+            provider_label = f"Amazon S3 ({self.region})" if not self.endpoint_url else f"S3 Compatible ({self.endpoint_url})"
+            return True, f"✓ Successfully connected to bucket '{self.bucket}' via {provider_label}! Read & write permissions verified."
+        except Exception as e:
+            return False, f"S3 Connection failed: {e}"
 
     def generate_presigned_download_url(
         self,
@@ -405,3 +457,16 @@ def generate_student_access_token(
 def verify_student_access_token(token: str) -> Dict[str, Any]:
     """Convenience wrapper for validating an HMAC student access token."""
     return get_s3_storage().verify_student_access_token(token)
+
+
+def reload_s3_storage() -> S3CertificateStorage:
+    """Forces re-initialization of the S3 storage singleton with fresh credentials."""
+    global _default_storage
+    _default_storage = S3CertificateStorage()
+    return _default_storage
+
+
+def test_s3_connection() -> tuple[bool, str]:
+    """Convenience wrapper for testing active S3 connection."""
+    return get_s3_storage().test_connection()
+

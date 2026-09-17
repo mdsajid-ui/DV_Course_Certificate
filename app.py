@@ -700,10 +700,12 @@ with st.sidebar:
     import s3_service
     s3_storage = s3_service.get_s3_storage()
     if s3_storage.is_configured():
-        st.markdown('<span class="dv-badge dv-badge-ok">● S3 Storage Active</span>', unsafe_allow_html=True)
+        dest_lbl = f"Amazon AWS S3 ({s3_storage.region})" if not s3_storage.endpoint_url else "S3 Compatible"
+        st.markdown(f'<span class="dv-badge dv-badge-ok">● {dest_lbl} Active</span>', unsafe_allow_html=True)
         st.caption(f"**Bucket:** `{s3_storage.bucket}`\n**Storage Path:** `certificates/2026/`")
     else:
         st.markdown('<span class="dv-badge dv-badge-warn">● S3 Not Connected</span>', unsafe_allow_html=True)
+        st.caption("Configure in Tab ④ Delivery Report & Vault")
 
     st.divider()
     st.markdown("### 📊 Active Roster Summary")
@@ -1016,6 +1018,28 @@ def ensure_cert_pdf_exists(record: cert_store.CertificateRecord) -> Optional[str
             shutil.copyfile(vault_path, cert_path)
         except Exception:
             pass
+
+        # Ensure uploaded to S3 if not already in cloud
+        if not getattr(record, "s3_key", None):
+            try:
+                import s3_service
+                s3_st = s3_service.get_s3_storage()
+                if s3_st.is_configured():
+                    s3_k = s3_st.upload_certificate_pdf(
+                        local_pdf_path=vault_path,
+                        year=record.year or "2026",
+                        student_id=str(record.student_id or record.email or cert_no),
+                        filename="certificate.pdf",
+                    )
+                    cert_store.update_s3_metadata(
+                        cert_number=cert_no,
+                        s3_key=s3_k,
+                        s3_bucket=s3_st.bucket,
+                        student_id=str(record.student_id or record.email or cert_no),
+                    )
+            except Exception:
+                pass
+
         return vault_path
     except Exception as e:
         log_event(record.email, "ENSURE_CERT_ERR", str(e))
@@ -2255,6 +2279,104 @@ with tab4:
                             cert_store.delete_certificate(rec.cert_number)
                             st.success(f"✓ Deleted {rec.cert_number}")
                             st.rerun()
+
+        # Amazon S3 Cloud Storage Manager
+        with st.expander("☁️ Manage Amazon S3 & Cloud Storage Connection", expanded=False):
+            s3_current = cert_store.get_s3_settings()
+            st.markdown("**Select S3 Provider Preset:**")
+            s3_p1, s3_p2 = st.columns(2)
+            with s3_p1:
+                if st.button("🏢 Amazon Web Services (AWS S3)", key="preset_aws_s3", use_container_width=True):
+                    st.session_state["s3_overrides"] = {
+                        "provider": "aws",
+                        "endpoint_url": "",
+                        "region": "us-east-1",
+                    }
+                    st.rerun()
+            with s3_p2:
+                if st.button("🔵 UpCloud Object Storage (b1storage)", key="preset_upcloud_s3", use_container_width=True):
+                    st.session_state["s3_overrides"] = {
+                        "provider": "upcloud",
+                        "endpoint_url": "https://t8fcc.upcloudobjects.com",
+                        "bucket": "b1storage",
+                        "region": "us-east-1",
+                    }
+                    st.rerun()
+
+            s3_active_vals = st.session_state.get("s3_overrides", {})
+            s3_col1, s3_col2 = st.columns(2)
+            with s3_col1:
+                ui_bucket = st.text_input(
+                    "S3 Bucket Name",
+                    value=s3_active_vals.get("bucket", s3_current["bucket"]),
+                    placeholder="e.g. dv-certificate-vault or b1storage",
+                    key="ui_s3_bucket",
+                )
+                ui_region = st.text_input(
+                    "AWS Region",
+                    value=s3_active_vals.get("region", s3_current["region"]),
+                    placeholder="e.g. ap-south-1, us-east-1",
+                    key="ui_s3_region",
+                )
+                ui_endpoint = st.text_input(
+                    "Endpoint URL (Leave BLANK for standard Amazon AWS S3)",
+                    value=s3_active_vals.get("endpoint_url", s3_current["endpoint_url"]),
+                    placeholder="Leave empty for AWS, or https://t8fcc.upcloudobjects.com",
+                    key="ui_s3_endpoint",
+                )
+            with s3_col2:
+                ui_access_key = st.text_input(
+                    "AWS Access Key ID",
+                    value=s3_active_vals.get("access_key", s3_current["access_key"]),
+                    placeholder="AKIA...",
+                    key="ui_s3_access_key",
+                )
+                ui_secret_key = st.text_input(
+                    "AWS Secret Access Key",
+                    value=s3_active_vals.get("secret_key", s3_current["secret_key"]),
+                    type="password",
+                    placeholder="Secret access key",
+                    key="ui_s3_secret_key",
+                )
+                ui_provider = "aws" if not ui_endpoint.strip() else "custom"
+
+            b_c1, b_c2, b_c3 = st.columns(3)
+            with b_c1:
+                if st.button("🔌 Test S3 Connection", key="btn_test_s3", use_container_width=True):
+                    import s3_service
+                    test_storage = s3_service.S3CertificateStorage(
+                        bucket=ui_bucket,
+                        region=ui_region,
+                        access_key=ui_access_key,
+                        secret_key=ui_secret_key,
+                        endpoint_url=ui_endpoint if ui_endpoint.strip() else None,
+                    )
+                    ok, msg = test_storage.test_connection()
+                    if ok:
+                        st.success(msg)
+                    else:
+                        st.error(msg)
+            with b_c2:
+                if st.button("💾 Save S3 Credentials Permanently", key="btn_save_s3", use_container_width=True):
+                    cert_store.save_s3_settings(
+                        bucket=ui_bucket,
+                        region=ui_region,
+                        access_key=ui_access_key,
+                        secret_key=ui_secret_key,
+                        endpoint_url=ui_endpoint,
+                        provider=ui_provider,
+                    )
+                    st.success("✓ S3 settings permanently saved to system settings database and .env!")
+                    st.rerun()
+            with b_c3:
+                if st.button("☁️ Sync All Unsynced Certificates to S3", key="btn_sync_all_s3", use_container_width=True):
+                    with st.spinner("Uploading missing certificates to S3..."):
+                        try:
+                            sync_res = cert_store.sync_all_certificates_to_s3(vault_dir=VAULT_DIR)
+                            st.success(f"✓ Sync complete! Uploaded {sync_res['uploaded']}, Already synced: {sync_res['already_synced']}, Failed: {sync_res['failed']}.")
+                            st.rerun()
+                        except Exception as sync_exc:
+                            st.error(f"Sync failed: {sync_exc}")
 
         st.markdown("##### 📜 Master Certificate Registry & Historical Ledger")
         v_df = pd.DataFrame([

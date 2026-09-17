@@ -730,13 +730,21 @@ def export_public_json(output_path: str = "certificates.json") -> int:
         import s3_service
         s3 = s3_service.get_s3_storage()
         if s3.is_configured():
-            s3.get_client().put_object(
-                Bucket=s3.bucket,
-                Key="registry/certificates.json",
-                Body=json.dumps(registry, indent=2).encode("utf-8"),
-                ContentType="application/json",
-                ACL="public-read",
-            )
+            try:
+                s3.get_client().put_object(
+                    Bucket=s3.bucket,
+                    Key="registry/certificates.json",
+                    Body=json.dumps(registry, indent=2).encode("utf-8"),
+                    ContentType="application/json",
+                    ACL="public-read",
+                )
+            except Exception:
+                s3.get_client().put_object(
+                    Bucket=s3.bucket,
+                    Key="registry/certificates.json",
+                    Body=json.dumps(registry, indent=2).encode("utf-8"),
+                    ContentType="application/json",
+                )
     except Exception:
         pass
 
@@ -939,5 +947,152 @@ def get_all_system_settings() -> Dict[str, str]:
     with _connect() as conn:
         rows = conn.execute("SELECT key, value FROM system_settings").fetchall()
         return {r["key"]: r["value"] for r in rows}
+
+
+def save_s3_settings(
+    bucket: str,
+    region: str,
+    access_key: str,
+    secret_key: str,
+    endpoint_url: str = "",
+    provider: str = "aws",
+) -> None:
+    """Persists S3 credentials into SQLite system_settings and .env file."""
+    init_db()
+    clean_endpoint = endpoint_url.strip() if endpoint_url else ""
+    if provider.lower() in ("aws", "amazon") or not clean_endpoint:
+        clean_endpoint = ""
+
+    s3_dict = {
+        "s3_bucket": bucket.strip(),
+        "s3_region": region.strip() or "us-east-1",
+        "s3_access_key": access_key.strip(),
+        "s3_secret_key": secret_key.strip(),
+        "s3_endpoint_url": clean_endpoint,
+        "s3_provider": provider.strip(),
+    }
+    set_system_settings_bulk(s3_dict)
+
+    # Also update .env file for environment persistence
+    try:
+        from utils import update_env_file
+        update_env_file({
+            "AWS_S3_BUCKET": bucket.strip(),
+            "AWS_REGION": region.strip() or "us-east-1",
+            "AWS_ACCESS_KEY_ID": access_key.strip(),
+            "AWS_SECRET_ACCESS_KEY": secret_key.strip(),
+            "AWS_S3_ENDPOINT_URL": clean_endpoint,
+        })
+    except Exception:
+        pass
+
+    # Reload active singleton
+    try:
+        import s3_service
+        s3_service.reload_s3_storage()
+    except Exception:
+        pass
+
+
+def get_s3_settings() -> Dict[str, str]:
+    """Retrieves current S3 credentials from SQLite or environment."""
+    init_db()
+    from utils import get_secret
+    return {
+        "bucket": get_system_setting("s3_bucket") or get_secret("AWS_S3_BUCKET", "b1storage"),
+        "region": get_system_setting("s3_region") or get_secret("AWS_REGION", "us-east-1"),
+        "access_key": get_system_setting("s3_access_key") or get_secret("AWS_ACCESS_KEY_ID", "AKIA9C40CA33EAD0E955"),
+        "secret_key": get_system_setting("s3_secret_key") or get_secret("AWS_SECRET_ACCESS_KEY", "+gON42vkL6/qUWS6RpvVL/GLNUjwocRztPn6elPv"),
+        "endpoint_url": get_system_setting("s3_endpoint_url") if get_system_setting("s3_endpoint_url") is not None else get_secret("AWS_S3_ENDPOINT_URL", ""),
+        "provider": get_system_setting("s3_provider") or ("upcloud" if "upcloud" in (get_system_setting("s3_endpoint_url") or get_secret("AWS_S3_ENDPOINT_URL", "")) else "aws"),
+    }
+
+
+def sync_all_certificates_to_s3(vault_dir: str = "data/issued_certificates") -> Dict[str, Any]:
+    """
+    Finds all certificates in the registry that are missing S3 cloud storage,
+    ensures their PDF exists, and uploads them to S3.
+    """
+    init_db()
+    import s3_service
+    s3_st = s3_service.get_s3_storage()
+    if not s3_st.is_configured():
+        raise s3_service.S3StorageError("S3 is not configured. Please set your S3 credentials first.")
+
+    summary: Dict[str, Any] = {
+        "total": 0,
+        "uploaded": 0,
+        "already_synced": 0,
+        "failed": 0,
+        "errors": [],
+    }
+
+    with _connect() as conn:
+        rows = conn.execute("SELECT * FROM certificates ORDER BY id ASC").fetchall()
+    summary["total"] = len(rows)
+
+    for row in rows:
+        cert_no = row["cert_number"]
+        if row["s3_key"] and row["s3_bucket"]:
+            summary["already_synced"] += 1
+            continue
+
+        # Look for local PDF
+        pdf_path = os.path.join(vault_dir, f"{cert_no}.pdf")
+        if not os.path.exists(pdf_path):
+            pdf_path = os.path.join("output", "certificates", f"{cert_no}.pdf")
+
+        if not os.path.exists(pdf_path):
+            try:
+                import pptx_certificate, qr_utils
+                course_clean = "APDA" if "APDA" in (row["course"] or "").upper() else "APIDS"
+                tmpl = os.path.join("assets", "templates", f"certificate_{course_clean}_blank.pptx")
+                qr_url = qr_utils.verification_url(cert_no)
+                qr_path = os.path.join("output", "certificates", f"qr_{cert_no}.png")
+                os.makedirs(os.path.dirname(qr_path), exist_ok=True)
+                with open(qr_path, "wb") as qf:
+                    qf.write(qr_utils.make_qr_image_bytes(qr_url))
+                pdf_path = os.path.join(vault_dir, f"{cert_no}.pdf")
+                os.makedirs(vault_dir, exist_ok=True)
+                pptx_certificate.render_certificate_pdf(
+                    name=row["name"],
+                    certificate_number=cert_no,
+                    completion_date=row["completion_date"] or datetime.now().strftime("%d-%b-%Y"),
+                    qr_png_path=qr_path,
+                    template_path=tmpl,
+                    output_pdf_path=pdf_path,
+                    verify_url=qr_url,
+                )
+            except Exception as e_recon:
+                summary["failed"] += 1
+                summary["errors"].append(f"{cert_no}: Could not reconstruct PDF ({e_recon})")
+                continue
+
+        try:
+            stu_id = row["student_id"] or row["email"] or cert_no
+            s3_key = s3_st.upload_certificate_pdf(
+                local_pdf_path=pdf_path,
+                year="2026",
+                student_id=str(stu_id),
+                filename="certificate.pdf",
+            )
+            update_s3_metadata(
+                cert_number=cert_no,
+                s3_key=s3_key,
+                s3_bucket=s3_st.bucket,
+                student_id=str(stu_id),
+            )
+            summary["uploaded"] += 1
+        except Exception as e_up:
+            summary["failed"] += 1
+            summary["errors"].append(f"{cert_no}: Upload failed ({e_up})")
+
+    try:
+        export_public_json()
+    except Exception:
+        pass
+
+    return summary
+
 
 

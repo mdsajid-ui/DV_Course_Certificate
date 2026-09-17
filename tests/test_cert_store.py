@@ -157,3 +157,54 @@ def test_system_settings_persistence(tmp_path):
     all_s = cs.get_all_system_settings()
     assert all_s["smtp_host"] == "mail.customserver.com"
 
+
+def test_s3_settings_persistence(tmp_path):
+    cs = _fresh_store(tmp_path)
+    cs.save_s3_settings(
+        bucket="my-aws-bucket",
+        region="ap-south-1",
+        access_key="AKIAEXAMPLE123",
+        secret_key="SECRETEXAMPLE456",
+        endpoint_url="",
+        provider="aws",
+    )
+    s3_cfg = cs.get_s3_settings()
+    assert s3_cfg["bucket"] == "my-aws-bucket"
+    assert s3_cfg["region"] == "ap-south-1"
+    assert s3_cfg["access_key"] == "AKIAEXAMPLE123"
+    assert s3_cfg["secret_key"] == "SECRETEXAMPLE456"
+    assert s3_cfg["endpoint_url"] == ""
+    assert s3_cfg["provider"] == "aws"
+
+
+def test_sync_all_certificates_to_s3_dry_run(tmp_path, monkeypatch):
+    cs = _fresh_store(tmp_path)
+    rec = cs.issue_or_get_certificate_number(
+        name="Test Sync Student",
+        email="sync.student@example.com",
+        course="APIDS",
+        completion_date="15-09-2026",
+    )
+
+    class DummyS3:
+        bucket = "dummy-bucket"
+        def is_configured(self):
+            return True
+        def upload_certificate_pdf(self, **kwargs):
+            return f"certificates/2026/{kwargs.get('student_id')}/certificate.pdf"
+
+    import s3_service
+    monkeypatch.setattr(s3_service, "get_s3_storage", lambda: DummyS3())
+
+    dummy_pdf = tmp_path / f"{rec.cert_number}.pdf"
+    dummy_pdf.write_bytes(b"%PDF-1.4 dummy content")
+
+    summary = cs.sync_all_certificates_to_s3(vault_dir=str(tmp_path))
+    assert summary["uploaded"] == 1
+    assert summary["failed"] == 0
+
+    updated_rec = cs.get_by_cert_number(rec.cert_number)
+    assert updated_rec.s3_key is not None
+    assert updated_rec.s3_bucket == "dummy-bucket"
+
+

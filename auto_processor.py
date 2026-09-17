@@ -191,14 +191,34 @@ def process_once() -> dict:
                     verify_url=qr_url,
                 )
 
-                subject = _apply_placeholders(
-                    DEFAULT_SUBJECT, student_name=record.name, course_name=course_name,
-                    certificate_number=record.cert_number,
-                )
-                body = _apply_placeholders(
-                    DEFAULT_BODY, student_name=record.name, course_name=course_name,
-                    certificate_number=record.cert_number,
-                )
+                # Archive locally in permanent vault
+                try:
+                    vault_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "issued_certificates")
+                    os.makedirs(vault_dir, exist_ok=True)
+                    shutil.copyfile(pdf_path, os.path.join(vault_dir, f"{record.cert_number}.pdf"))
+                except Exception:
+                    pass
+
+                # Secure Amazon S3 Upload
+                try:
+                    import s3_service
+                    s3_st = s3_service.get_s3_storage()
+                    if s3_st.is_configured():
+                        s3_k = s3_st.upload_certificate_pdf(
+                            local_pdf_path=pdf_path,
+                            year=record.year or "2026",
+                            student_id=str(record.student_id or record.email or record.cert_number),
+                            filename="certificate.pdf",
+                        )
+                        cert_store.update_s3_metadata(
+                            cert_number=record.cert_number,
+                            s3_key=s3_k,
+                            s3_bucket=s3_st.bucket,
+                            student_id=str(record.student_id or record.email or record.cert_number),
+                        )
+                except Exception as s3_err:
+                    log.warning("S3 upload failed for %s: %s", record.cert_number, s3_err)
+
                 sender.send(email, subject, body, attachment_path=pdf_path)
 
             cert_store.mark_sent(record.cert_number)
