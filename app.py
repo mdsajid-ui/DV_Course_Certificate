@@ -891,6 +891,7 @@ def build_participant_cert(rec: dict, template_mode: str, default_course: str) -
             qr_png_path=qr_path,
             template_path=template_file,
             output_pdf_path=pdf_path,
+            verify_url=verify_url,
         )
     else:
         # Custom image/pdf template
@@ -1002,6 +1003,7 @@ def ensure_cert_pdf_exists(record: cert_store.CertificateRecord) -> Optional[str
             qr_png_path=qr_path,
             template_path=template_file,
             output_pdf_path=vault_path,
+            verify_url=verify_url,
         )
         try:
             from pdf_security import lock_and_protect_pdf

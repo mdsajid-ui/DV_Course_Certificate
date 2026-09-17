@@ -188,6 +188,7 @@ def process_once() -> dict:
                     qr_png_path=qr_path,
                     template_path=template_path,
                     output_pdf_path=pdf_path,
+                    verify_url=qr_url,
                 )
 
                 subject = _apply_placeholders(

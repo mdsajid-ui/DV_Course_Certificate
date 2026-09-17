@@ -44,7 +44,8 @@ def test_fill_certificate_text_raises_on_missing_template_field(tmp_path):
 
 def test_render_certificate_pdf_end_to_end(tmp_path):
     qr_path = tmp_path / "qr.png"
-    qr_path.write_bytes(qr_utils.make_qr_image_bytes("https://example.com/verify/DVA-APIDS-2026-000999"))
+    qr_url = "https://certificate.dvanalyticsmds.in/verify/DVA-APIDS-2026-000999"
+    qr_path.write_bytes(qr_utils.make_qr_image_bytes(qr_url))
     out_path = tmp_path / "cert.pdf"
 
     pc.render_certificate_pdf(
@@ -53,6 +54,7 @@ def test_render_certificate_pdf_end_to_end(tmp_path):
         completion_date="01-01-2026",
         qr_png_path=str(qr_path),
         output_pdf_path=str(out_path),
+        verify_url=qr_url,
     )
     assert out_path.exists()
     assert out_path.stat().st_size > 10_000  # sanity: not an empty/broken PDF

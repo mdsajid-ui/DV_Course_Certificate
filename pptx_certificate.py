@@ -231,11 +231,15 @@ def render_certificate_pdf_pillow(
     qr_png_path: Optional[str] = None,
     template_path: Optional[str] = None,
     output_pdf_path: str,
+    verify_url: Optional[str] = None,
 ) -> str:
     """
-    Renders the official DV Analytics certificate directly using Pillow and saves as PDF.
-    Requires ZERO external binaries (no LibreOffice, no X11, no PowerPoint COM),
-    executes in ~30ms, and guarantees 100% reliability on any headless Linux/cloud server.
+    Renders the executive DV Analytics certificate with Ivy-league visual hierarchy:
+    1. Prominent Student Name with elegant gold accent rule.
+    2. High-contrast, standalone Course Name (e.g. APIDS / APDA).
+    3. Prominently stated 6-Month Program Duration.
+    4. Verification instructions and URL below the QR code.
+    5. Clean curriculum, applications, and domain project competency summary.
     """
     template_path = template_path or DEFAULT_TEMPLATE_PATH
     if not os.path.exists(template_path):
@@ -274,113 +278,137 @@ def render_certificate_pdf_pillow(
     draw = ImageDraw.Draw(bg_img)
 
     # 2. Paste QR Code if provided (placed under NASSCOM logo at top-right)
+    qr_x = int(W * 0.805)
+    qr_y = int(H * 0.184)
+    qr_size = int(W * 0.115)
     if qr_png_path and os.path.exists(qr_png_path):
         try:
             qr = Image.open(qr_png_path).convert("RGBA")
-            qr_size = int(W * 0.115)
             qr = qr.resize((qr_size, qr_size), Image.Resampling.LANCZOS)
-            bg_img.paste(qr, (int(W * 0.805), int(H * 0.184)), qr)
+            bg_img.paste(qr, (qr_x, qr_y), qr)
         except Exception as qr_err:
             logger.warning("Could not paste QR code on certificate: %s", qr_err)
 
-    # 3. Load font (bundled DejaVuSerif-Bold.ttf or system font)
+    # 3. Load font family (bundled DejaVuSerif-Bold.ttf or system font)
     font_file = os.path.join(os.path.dirname(__file__), "assets", "DejaVuSerif-Bold.ttf")
     if not os.path.exists(font_file):
         font_file = "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"
 
-    try:
-        font_reg = ImageFont.truetype(font_file, 24)
-        font_bold = ImageFont.truetype(font_file, 25)
-        font_name = ImageFont.truetype(font_file, 29)
-        font_meta = ImageFont.truetype(font_file, 26)
-    except Exception:
-        font_reg = ImageFont.load_default()
-        font_bold = ImageFont.load_default()
-        font_name = ImageFont.load_default()
-        font_meta = ImageFont.load_default()
+    font_lead = ImageFont.truetype(font_file, 22)
+    font_trans = ImageFont.truetype(font_file, 22)
+    font_course = ImageFont.truetype(font_file, 35)
+    font_dur = ImageFont.truetype(font_file, 20)
+    font_body = ImageFont.truetype(font_file, 21)
+    font_body_bold = ImageFont.truetype(font_file, 22)
+    font_meta = ImageFont.truetype(font_file, 24)
+    font_qr_title = ImageFont.truetype(font_file, 13)
+    font_qr_sub = ImageFont.truetype(font_file, 11)
 
-    # 4. Determine course text and metadata
+    # 4. Add Verification Notice & URL below QR code
+    qr_center_x = qr_x + qr_size // 2
+    qr_t1 = "Scan to Verify Authenticity"
+    b1 = draw.textbbox((0, 0), qr_t1, font=font_qr_title)
+    draw.text((qr_center_x - (b1[2] - b1[0]) / 2, qr_y + qr_size + 8), qr_t1, font=font_qr_title, fill=(10, 30, 85))
+
+    # Format verification URL caption
+    display_url = verify_url or "mdsajid-ui.github.io/DV_Course_Certificate"
+    display_url = display_url.replace("https://", "").replace("http://", "")
+    if len(display_url) > 42:
+        display_url = display_url[:39] + "..."
+    b2 = draw.textbbox((0, 0), display_url, font=font_qr_sub)
+    draw.text((qr_center_x - (b2[2] - b2[0]) / 2, qr_y + qr_size + 27), display_url, font=font_qr_sub, fill=(90, 90, 90))
+
+    # 5. Course parameters
     is_apda = "APDA" in template_path.upper() or "DATA ANALYTICS" in template_path.upper()
     course_name = (
         "Advanced Program in Data Analytics (APDA)"
         if is_apda
         else "Advanced Program in Industrial Data Science (APIDS)"
     )
-
     app_text = (
         "Excel, SQL, Python, SAS, Tableau, Power BI"
         if is_apda
-        else "Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, Azure MLOPS"
+        else "Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, Azure MLOps"
     )
-    proj_text = "Banking, Telecom, Retail, eCommerce, Healthcare"
-    mining_extra = "" if is_apda else " (Predictive Modeling, Machine Learning, Deep Learning, and Generative AI)"
+    proj_text = "Banking, Telecom, Retail, eCommerce, and Healthcare"
 
     clean_name = str(name).strip()
     clean_cert = str(certificate_number).strip()
     clean_date = str(completion_date).strip()
 
-    # Build paragraph tokens
-    tokens = [
-        ("This is to certify that ", font_reg, (40, 40, 40)),
-        (f"{clean_name} ", font_name, (15, 25, 75)),
-        ("has successfully completed 6 months ", font_reg, (40, 40, 40)),
-        (f"{course_name} . ", font_bold, (30, 30, 30)),
-        (
-            f"This course covered fundamental and advanced topics in Data Science, including DBMS Programming, Data Analysis & Visualization, and Data Mining{mining_extra} providing hands-on experience in data-driven solutions.",
-            font_reg,
-            (40, 40, 40),
-        ),
-    ]
+    # --- Tier 1: Lead-in & Student Name (HIGHEST PROMINENCE) ---
+    lead_str = "This is to certify that"
+    b_lead = draw.textbbox((0, 0), lead_str, font=font_lead)
+    draw.text(((W - (b_lead[2] - b_lead[0])) / 2, 530), lead_str, font=font_lead, fill=(80, 80, 80))
 
-    # Word-wrap tokens into lines
-    max_w = int(W * 0.83)
-    lines = []
-    curr_line = []
-    curr_w = 0
+    # Dynamic scaling for student name so long names never overflow
+    name_size = 56
+    while name_size > 32:
+        font_name = ImageFont.truetype(font_file, name_size)
+        b_name = draw.textbbox((0, 0), clean_name, font=font_name)
+        if (b_name[2] - b_name[0]) <= int(W * 0.82):
+            break
+        name_size -= 2
 
-    flat_tokens = []
-    for text, f, c in tokens:
-        if len(text) > 40 and " " in text:
-            for w in text.split(" "):
-                if w:
-                    flat_tokens.append((w + " ", f, c))
-        else:
-            flat_tokens.append((text, f, c))
+    nw = b_name[2] - b_name[0]
+    nx = (W - nw) / 2
+    draw.text((nx, 562), clean_name, font=font_name, fill=(8, 25, 75))
 
-    for text, f, c in flat_tokens:
-        bbox = draw.textbbox((0, 0), text, font=f)
-        w = bbox[2] - bbox[0]
-        if curr_w + w > max_w and curr_line:
-            lines.append(curr_line)
-            curr_line = [(text, f, c)]
-            curr_w = w
-        else:
-            curr_line.append((text, f, c))
-            curr_w += w
-    if curr_line:
-        lines.append(curr_line)
+    # Elegant gold accent line with center diamond ornament
+    line_y = 632
+    draw.line([(nx - 40, line_y), (nx + nw + 40, line_y)], fill=(195, 155, 60), width=2)
+    draw.polygon([(W / 2, line_y - 4), (W / 2 + 5, line_y), (W / 2, line_y + 4), (W / 2 - 5, line_y)], fill=(195, 155, 60))
 
-    lines.append([("Applications: ", font_reg, (50, 50, 50)), (app_text, font_bold, (30, 30, 30))])
-    lines.append([("Projects: ", font_reg, (50, 50, 50)), (proj_text, font_bold, (30, 30, 30))])
+    # --- Tier 2: Completion statement + Clear Duration ---
+    trans_str = "has successfully completed the 6-Month Professional Program in"
+    b_trans = draw.textbbox((0, 0), trans_str, font=font_trans)
+    draw.text(((W - (b_trans[2] - b_trans[0])) / 2, 650), trans_str, font=font_trans, fill=(55, 55, 55))
 
-    # Draw lines centered horizontally
-    y_start = 548
-    line_h = 41
-    for i, segs in enumerate(lines):
-        total_w = sum(draw.textbbox((0, 0), t, font=f)[2] - draw.textbbox((0, 0), t, font=f)[0] for t, f, c in segs)
-        x = (W - total_w) / 2
-        y = y_start + i * line_h
-        for t, f, c in segs:
-            bbox = draw.textbbox((0, 0), t, font=f)
-            draw.text((x, y), t, font=f, fill=c)
-            x += (bbox[2] - bbox[0])
+    # --- Tier 3: Course Name (STANDS OUT ON ITS OWN LINE) ---
+    b_course = draw.textbbox((0, 0), course_name, font=font_course)
+    cw = b_course[2] - b_course[0]
+    cx = (W - cw) / 2
+    draw.text((cx, 688), course_name, font=font_course, fill=(0, 28, 85))
 
-    # Draw Registration Number and Completion Date
-    meta_text = f"Certificate Registration Number: {clean_cert}     Date of Completion: {clean_date}"
-    bbox_meta = draw.textbbox((0, 0), meta_text, font=font_meta)
-    meta_w = bbox_meta[2] - bbox_meta[0]
-    meta_y = y_start + len(lines) * line_h + 32
-    draw.text(((W - meta_w) / 2, meta_y), meta_text, font=font_meta, fill=(20, 20, 20))
+    # Explicit Duration & Pedagogy Badge
+    dur_str = "Duration: 6 Months (Comprehensive Hands-On Training & Real-World Projects)"
+    b_dur = draw.textbbox((0, 0), dur_str, font=font_dur)
+    draw.text(((W - (b_dur[2] - b_dur[0])) / 2, 735), dur_str, font=font_dur, fill=(70, 70, 70))
+
+    # --- Tier 4: Curriculum & Skills ---
+    c1 = "A comprehensive curriculum covering DBMS Programming, Data Analysis & Visualization,"
+    b_c1 = draw.textbbox((0, 0), c1, font=font_body)
+    draw.text(((W - (b_c1[2] - b_c1[0])) / 2, 772), c1, font=font_body, fill=(45, 45, 45))
+
+    if is_apda:
+        c2 = "and Data Mining providing hands-on experience in industry data-driven solutions."
+    else:
+        c2 = "Data Mining (Predictive Modeling, Machine Learning, Deep Learning, and Generative AI)."
+    b_c2 = draw.textbbox((0, 0), c2, font=font_body)
+    draw.text(((W - (b_c2[2] - b_c2[0])) / 2, 800), c2, font=font_body, fill=(45, 45, 45))
+
+    # Applications
+    app_lbl = "Applications: "
+    app_val = app_text
+    w_lbl = draw.textbbox((0, 0), app_lbl, font=font_body)[2] - draw.textbbox((0, 0), app_lbl, font=font_body)[0]
+    w_val = draw.textbbox((0, 0), app_val, font=font_body_bold)[2] - draw.textbbox((0, 0), app_val, font=font_body_bold)[0]
+    ax = (W - (w_lbl + w_val)) / 2
+    draw.text((ax, 838), app_lbl, font=font_body, fill=(75, 75, 75))
+    draw.text((ax + w_lbl, 838), app_val, font=font_body_bold, fill=(20, 20, 20))
+
+    # Projects
+    proj_lbl = "Domain Projects: "
+    proj_val = proj_text
+    w_plbl = draw.textbbox((0, 0), proj_lbl, font=font_body)[2] - draw.textbbox((0, 0), proj_lbl, font=font_body)[0]
+    w_pval = draw.textbbox((0, 0), proj_val, font=font_body_bold)[2] - draw.textbbox((0, 0), proj_val, font=font_body_bold)[0]
+    px = (W - (w_plbl + w_pval)) / 2
+    draw.text((px, 866), proj_lbl, font=font_body, fill=(75, 75, 75))
+    draw.text((px + w_plbl, 866), proj_val, font=font_body_bold, fill=(20, 20, 20))
+
+    # --- Tier 5: Verification & Registration Ledger ---
+    meta_text = f"Certificate Registration Number: {clean_cert}          Date of Completion: {clean_date}"
+    b_meta = draw.textbbox((0, 0), meta_text, font=font_meta)
+    draw.text(((W - (b_meta[2] - b_meta[0])) / 2, 920), meta_text, font=font_meta, fill=(10, 10, 10))
 
     os.makedirs(os.path.dirname(output_pdf_path) or ".", exist_ok=True)
     bg_img.save(output_pdf_path, "PDF", resolution=150.0)
@@ -490,6 +518,7 @@ def render_certificate_pdf(
     template_path: Optional[str] = None,
     output_pdf_path: str,
     engine: Optional[str] = None,
+    verify_url: Optional[str] = None,
 ) -> str:
     """
     Fills the official DV Analytics certificate template and produces a final PDF at `output_pdf_path`.
@@ -509,6 +538,7 @@ def render_certificate_pdf(
             qr_png_path=qr_png_path,
             template_path=template_path,
             output_pdf_path=output_pdf_path,
+            verify_url=verify_url,
         )
 
     # If external engine requested, try external with automatic fallback to Pillow
@@ -533,5 +563,6 @@ def render_certificate_pdf(
             qr_png_path=qr_png_path,
             template_path=template_path,
             output_pdf_path=output_pdf_path,
+            verify_url=verify_url,
         )
 
