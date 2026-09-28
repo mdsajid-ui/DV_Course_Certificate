@@ -110,6 +110,7 @@ COLUMN_KEYWORDS = {
     "Course": ["course", "program", "programme", "course name"],
     "Completion Date": ["completion date", "date of completion", "date", "completed on"],
     "Certificate Number": ["certificate number", "certificate no", "cert number", "cert no"],
+    "Tools": ["tools", "tool", "applications", "skills", "technologies"],
 }
 
 
@@ -156,8 +157,8 @@ def validate_excel_columns(df: pd.DataFrame):
         else:
             missing.append(required)
 
-    # Optional fields (Mobile Number, Course, Completion Date, Certificate Number)
-    for opt in ["Mobile Number", "Course", "Completion Date", "Certificate Number"]:
+    # Optional fields (Mobile Number, Course, Completion Date, Certificate Number, Tools)
+    for opt in ["Mobile Number", "Course", "Completion Date", "Certificate Number", "Tools"]:
         match = find_matching_column(df.columns, opt)
         if match:
             column_map[opt] = match
@@ -175,6 +176,7 @@ def normalize_records(df: pd.DataFrame, column_map: dict):
         course_col = column_map.get("Course")
         date_col = column_map.get("Completion Date")
         cert_col = column_map.get("Certificate Number")
+        tools_col = column_map.get("Tools")
 
         name = str(row[name_col]).strip() if name_col and name_col in row else ""
         email = str(row[email_col]).strip() if email_col and email_col in row else ""
@@ -182,6 +184,7 @@ def normalize_records(df: pd.DataFrame, column_map: dict):
         course = str(row[course_col]).strip() if course_col and course_col in row else ""
         comp_date = str(row[date_col]).strip() if date_col and date_col in row else ""
         cert_no = str(row[cert_col]).strip() if cert_col and cert_col in row else ""
+        tools = str(row[tools_col]).strip() if tools_col and tools_col in row else ""
 
         if mobile.lower() in ("nan", "none"):
             mobile = ""
@@ -191,6 +194,8 @@ def normalize_records(df: pd.DataFrame, column_map: dict):
             comp_date = ""
         if cert_no.lower() in ("nan", "none"):
             cert_no = ""
+        if tools.lower() in ("nan", "none"):
+            tools = ""
         if name.lower() in ("nan", "none") or not name:
             continue
         if email.lower() in ("nan", "none"):
@@ -207,6 +212,8 @@ def normalize_records(df: pd.DataFrame, column_map: dict):
             rec["Completion Date"] = comp_date
         if cert_no:
             rec["Certificate Number"] = cert_no
+        if tools:
+            rec["Tools"] = tools
 
         records.append(rec)
     return records

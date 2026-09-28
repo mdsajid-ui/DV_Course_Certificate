@@ -116,3 +116,21 @@ def test_apids_and_apda_templates_are_not_byte_identical():
     with open(os.path.join(base, "certificate_APDA_blank.pptx"), "rb") as f:
         apda_bytes = f.read()
     assert apids_bytes != apda_bytes
+
+
+def test_render_certificate_pdf_with_custom_tools(tmp_path):
+    qr_path = tmp_path / "qr_tools.png"
+    qr_path.write_bytes(qr_utils.make_qr_image_bytes("https://example.com/verify/DVA-APIDS-2026-000555"))
+    out_path = tmp_path / "cert_custom_tools.pdf"
+
+    custom_tools = "Python, PyTorch, LangChain, Snowflake, Tableau, Docker"
+    pc.render_certificate_pdf_pillow(
+        name="Priya Verma",
+        certificate_number="DVA-APIDS-2026-000555",
+        completion_date="20-Sep-2026",
+        qr_png_path=str(qr_path),
+        output_pdf_path=str(out_path),
+        tools=custom_tools,
+    )
+    assert out_path.exists()
+    assert out_path.stat().st_size > 10_000

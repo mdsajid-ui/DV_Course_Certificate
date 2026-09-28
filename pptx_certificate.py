@@ -232,7 +232,8 @@ def render_certificate_pdf_pillow(
     template_path: Optional[str] = None,
     output_pdf_path: str,
     verify_url: Optional[str] = None,
-) -> str:
+    tools: Optional[str] = None,
+):
     """
     Renders the executive DV Analytics certificate with Ivy-league visual hierarchy:
     1. Prominent Student Name with elegant gold accent rule.
@@ -325,11 +326,14 @@ def render_certificate_pdf_pillow(
         if is_apda
         else "Advanced Program in Industrial Data Science (APIDS)"
     )
-    app_text = (
-        "Excel, SQL, Python, SAS, Tableau, Power BI"
-        if is_apda
-        else "Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, Azure MLOps"
-    )
+    if tools and str(tools).strip():
+        app_text = str(tools).strip()
+    else:
+        app_text = (
+            "Excel, SQL, Python, SAS, Tableau, Power BI"
+            if is_apda
+            else "Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, Azure MLOps"
+        )
     proj_text = "Banking, Telecom, Retail, eCommerce, and Healthcare"
 
     clean_name = str(name).strip()
@@ -390,11 +394,17 @@ def render_certificate_pdf_pillow(
     # Applications
     app_lbl = "Applications: "
     app_val = app_text
+    font_tools = font_body_bold
+    tools_pt = 18
     w_lbl = draw.textbbox((0, 0), app_lbl, font=font_body)[2] - draw.textbbox((0, 0), app_lbl, font=font_body)[0]
-    w_val = draw.textbbox((0, 0), app_val, font=font_body_bold)[2] - draw.textbbox((0, 0), app_val, font=font_body_bold)[0]
+    w_val = draw.textbbox((0, 0), app_val, font=font_tools)[2] - draw.textbbox((0, 0), app_val, font=font_tools)[0]
+    while (w_lbl + w_val) > int(W * 0.90) and tools_pt > 11:
+        tools_pt -= 1
+        font_tools = ImageFont.truetype(font_file, tools_pt)
+        w_val = draw.textbbox((0, 0), app_val, font=font_tools)[2] - draw.textbbox((0, 0), app_val, font=font_tools)[0]
     ax = (W - (w_lbl + w_val)) / 2
     draw.text((ax, 838), app_lbl, font=font_body, fill=(75, 75, 75))
-    draw.text((ax + w_lbl, 838), app_val, font=font_body_bold, fill=(20, 20, 20))
+    draw.text((ax + w_lbl, 838), app_val, font=font_tools, fill=(20, 20, 20))
 
     # Projects
     proj_lbl = "Domain Projects: "
@@ -519,6 +529,7 @@ def render_certificate_pdf(
     output_pdf_path: str,
     engine: Optional[str] = None,
     verify_url: Optional[str] = None,
+    tools: Optional[str] = None,
 ) -> str:
     """
     Fills the official DV Analytics certificate template and produces a final PDF at `output_pdf_path`.
@@ -539,6 +550,7 @@ def render_certificate_pdf(
             template_path=template_path,
             output_pdf_path=output_pdf_path,
             verify_url=verify_url,
+            tools=tools,
         )
 
     # If external engine requested, try external with automatic fallback to Pillow
@@ -564,5 +576,6 @@ def render_certificate_pdf(
             template_path=template_path,
             output_pdf_path=output_pdf_path,
             verify_url=verify_url,
+            tools=tools,
         )
 

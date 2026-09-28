@@ -654,6 +654,8 @@ defaults = {
     "cert_start_seq": 2075,
     "cert_year": "2025",
     "verification_base_url": os.environ.get("CERTIFICATE_VERIFICATION_BASE_URL", "https://mdsajid-ui.github.io/DV_Course_Certificate"),
+    "tools_apids": "Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, Azure MLOps",
+    "tools_apda": "Excel, SQL, Python, SAS, Tableau, Power BI",
 }
 
 for k, v in defaults.items():
@@ -729,7 +731,7 @@ OFFICIAL_EMAIL_TEMPLATES = {
         "body": (
             "Dear {{Name}},\n\n"
             "Congratulations on successfully completing the 6-Month Advanced Program in Industrial Data Science (APIDS) at DV Analytics!\n\n"
-            "Over the course of this program, you've built strong expertise in DBMS Programming, Data Analysis & Visualization, and Data Mining — covering Predictive Modeling, Machine Learning, Deep Learning, and Generative AI. You've also gained hands-on experience with Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, and Azure MLOps, applying these skills to real-world projects across Banking, Telecom, Retail, eCommerce, and Healthcare.\n\n"
+            "Over the course of this program, you've built strong expertise in DBMS Programming, Data Analysis & Visualization, and Data Mining — covering Predictive Modeling, Machine Learning, Deep Learning, and Generative AI. You've also gained hands-on experience with {{Tools}}, applying these skills to real-world projects across Banking, Telecom, Retail, eCommerce, and Healthcare.\n\n"
             "Please find your Certificate of Completion attached.\n\n"
             "Certificate Registration Number: {{CertNo}}\n"
             "Date of Completion: {{Date}}\n\n"
@@ -745,7 +747,7 @@ OFFICIAL_EMAIL_TEMPLATES = {
         "body": (
             "Dear {{Name}},\n\n"
             "Congratulations on successfully completing the 6-Month Advanced Program in Data Analytics (APDA) at DV Analytics!\n\n"
-            "Throughout the program, you've developed a solid foundation in DBMS Programming, Data Analysis & Visualization, and Data Mining, with hands-on training in Excel, SQL, Python, SAS, Tableau, and Power BI — applied to real-world projects spanning Banking, Telecom, Retail, eCommerce, and Healthcare.\n\n"
+            "Throughout the program, you've developed a solid foundation in DBMS Programming, Data Analysis & Visualization, and Data Mining, with hands-on training in {{Tools}} — applied to real-world projects spanning Banking, Telecom, Retail, eCommerce, and Healthcare.\n\n"
             "Please find your Certificate of Completion attached.\n\n"
             "Certificate Registration Number: {{CertNo}}\n"
             "Date of Completion: {{Date}}\n\n"
@@ -770,6 +772,7 @@ def _apply_email_placeholders(
     date: str,
     mobile: str = "",
     download_url: str = "",
+    tools: str = "",
 ) -> str:
     res = tpl
     res = re.sub(r"\{\{\s*(?:student_)?name\s*\}\}", name, res, flags=re.IGNORECASE)
@@ -778,6 +781,7 @@ def _apply_email_placeholders(
     res = re.sub(r"\{\{\s*(?:date|issue_date|completion_date)\s*\}\}", date, res, flags=re.IGNORECASE)
     res = re.sub(r"\{\{\s*(?:mobile|phone|mobile_number)\s*\}\}", mobile, res, flags=re.IGNORECASE)
     res = re.sub(r"\{\{\s*(?:download_link|download_url|certificate_link)\s*\}\}", download_url, res, flags=re.IGNORECASE)
+    res = re.sub(r"\{\{\s*(?:tools|technologies|applications)\s*\}\}", tools, res, flags=re.IGNORECASE)
     return res
 
 
@@ -791,6 +795,7 @@ def get_course_email_content(
     email: str = "",
     student_id: str = "",
     download_url: str = "",
+    tools: str = "",
     custom_subject: Optional[str] = None,
     custom_body: Optional[str] = None,
     use_custom: bool = False,
@@ -814,19 +819,25 @@ def get_course_email_content(
         except Exception:
             download_url = ""
 
+    c_upper = (course or "APIDS").upper()
+    if not tools:
+        if "APDA" in c_upper or "ANALYTICS" in c_upper:
+            tools = st.session_state.get("tools_apda", "Excel, SQL, Python, SAS, Tableau, Power BI") if hasattr(st, "session_state") and "tools_apda" in st.session_state else "Excel, SQL, Python, SAS, Tableau, Power BI"
+        else:
+            tools = st.session_state.get("tools_apids", "Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, Azure MLOps") if hasattr(st, "session_state") and "tools_apids" in st.session_state else "Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, Azure MLOps"
+
     if use_custom and custom_subject and custom_body:
-        subj = _apply_email_placeholders(custom_subject, name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url)
-        body = _apply_email_placeholders(custom_body, name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url)
+        subj = _apply_email_placeholders(custom_subject, name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url, tools=tools)
+        body = _apply_email_placeholders(custom_body, name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url, tools=tools)
         return subj, body
 
-    c_upper = (course or "APIDS").upper()
     if "APDA" in c_upper or "ANALYTICS" in c_upper:
         tpl = OFFICIAL_EMAIL_TEMPLATES["APDA"]
     else:
         tpl = OFFICIAL_EMAIL_TEMPLATES["APIDS"]
 
-    subj = _apply_email_placeholders(tpl["subject"], name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url)
-    body = _apply_email_placeholders(tpl["body"], name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url)
+    subj = _apply_email_placeholders(tpl["subject"], name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url, tools=tools)
+    body = _apply_email_placeholders(tpl["body"], name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url, tools=tools)
     return subj, body
 
 
@@ -886,6 +897,13 @@ def build_participant_cert(rec: dict, template_mode: str, default_course: str) -
         if not os.path.exists(template_file):
             template_file = os.path.join(BASE_DIR, "assets", "templates", "certificate_APIDS_blank.pptx")
 
+        c_upper = (course or default_course or "APIDS").upper()
+        if "APDA" in c_upper or "ANALYTICS" in c_upper:
+            default_tools = st.session_state.get("tools_apda", "Excel, SQL, Python, SAS, Tableau, Power BI")
+        else:
+            default_tools = st.session_state.get("tools_apids", "Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, Azure MLOps")
+        cert_tools = rec.get("Tools") or default_tools
+
         pptx_certificate.render_certificate_pdf(
             name=name,
             certificate_number=cert_number,
@@ -894,6 +912,7 @@ def build_participant_cert(rec: dict, template_mode: str, default_course: str) -
             template_path=template_file,
             output_pdf_path=pdf_path,
             verify_url=verify_url,
+            tools=cert_tools,
         )
     else:
         # Custom image/pdf template
@@ -998,6 +1017,12 @@ def ensure_cert_pdf_exists(record: cert_store.CertificateRecord) -> Optional[str
         with open(qr_path, "wb") as f:
             f.write(qr_bytes)
 
+        recon_course = (record.course or "APIDS").upper()
+        if "APDA" in recon_course or "ANALYTICS" in recon_course:
+            recon_tools = st.session_state.get("tools_apda", "Excel, SQL, Python, SAS, Tableau, Power BI") if hasattr(st, "session_state") and "tools_apda" in st.session_state else "Excel, SQL, Python, SAS, Tableau, Power BI"
+        else:
+            recon_tools = st.session_state.get("tools_apids", "Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, Azure MLOps") if hasattr(st, "session_state") and "tools_apids" in st.session_state else "Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, Azure MLOps"
+
         pptx_certificate.render_certificate_pdf(
             name=record.name,
             certificate_number=cert_no,
@@ -1006,6 +1031,7 @@ def ensure_cert_pdf_exists(record: cert_store.CertificateRecord) -> Optional[str
             template_path=template_file,
             output_pdf_path=vault_path,
             verify_url=verify_url,
+            tools=recon_tools,
         )
         try:
             from pdf_security import lock_and_protect_pdf
@@ -1091,6 +1117,8 @@ with tab1:
                 m_email = st.text_input("Email ID *", placeholder="e.g. john.doe@example.com")
                 m_cert_no = st.text_input("Certificate Number (Optional)", placeholder="Auto-generated if blank")
 
+            m_tools = st.text_input("🛠️ Custom Tools for Student (Optional)", placeholder="Leave blank to use course default tools")
+
             add_btn = st.form_submit_button("➕ Add Student to Roster", use_container_width=True)
             if add_btn:
                 if not m_name.strip() or not m_email.strip():
@@ -1105,6 +1133,7 @@ with tab1:
                         "Course": m_course.strip(),
                         "Completion Date": m_date.strip(),
                         "Certificate Number": m_cert_no.strip(),
+                        "Tools": m_tools.strip(),
                     }
                     existing_idx = next((i for i, r in enumerate(st.session_state.records) if r["Email ID"].lower() == m_email.strip().lower()), None)
                     if existing_idx is not None:
@@ -1119,7 +1148,7 @@ with tab1:
         st.caption("You can directly type into the table below, paste cells, or use the '+' row button at the bottom.")
 
         current_df = pd.DataFrame(st.session_state.records)
-        for col in ["Name", "Mobile Number", "Email ID", "Course", "Completion Date", "Certificate Number"]:
+        for col in ["Name", "Mobile Number", "Email ID", "Course", "Completion Date", "Certificate Number", "Tools"]:
             if col not in current_df.columns:
                 current_df[col] = ""
 
@@ -1136,6 +1165,7 @@ with tab1:
                 "Course": st.column_config.SelectboxColumn("Course", options=["APIDS", "APDA", "Data Science", "Data Analytics"], default="APIDS"),
                 "Completion Date": st.column_config.TextColumn("Completion Date", default=datetime.now().strftime("%d-%b-%Y")),
                 "Certificate Number": st.column_config.TextColumn("Certificate Number (Optional)"),
+                "Tools": st.column_config.TextColumn("Tools (Optional)", help="Overrides course default tools"),
             },
         )
 
@@ -1152,6 +1182,7 @@ with tab1:
                         "Course": str(row.get("Course", "APIDS")).strip() if str(row.get("Course", "")).lower() not in ("nan", "none") else "APIDS",
                         "Completion Date": str(row.get("Completion Date", "")).strip() if str(row.get("Completion Date", "")).lower() not in ("nan", "none") else datetime.now().strftime("%d-%b-%Y"),
                         "Certificate Number": str(row.get("Certificate Number", "")).strip() if str(row.get("Certificate Number", "")).lower() not in ("nan", "none") else "",
+                        "Tools": str(row.get("Tools", "")).strip() if str(row.get("Tools", "")).lower() not in ("nan", "none") else "",
                     })
             st.session_state.records = cleaned_records
             st.success(f"✓ Saved {len(cleaned_records)} participants to active roster.")
@@ -1338,6 +1369,53 @@ with tab1:
                     cert_store.set_sequence_counter(bucket, int(st.session_state.cert_start_seq))
                     st.success(f"✓ Reset sequence to {st.session_state.cert_start_seq}! (Cleared {deleted_cnt} test records)")
                     st.rerun()
+
+        # ------------------ Tools / Applications Customization ------------------
+        st.markdown("---")
+        st.markdown("#### 🛠️ Tools & Technologies Options (Applications on Certificate)")
+        st.caption("Customize the tools printed under **'Applications:'** on the certificate and included in the completion emails.")
+
+        col_tool1, col_tool2 = st.columns(2)
+        with col_tool1:
+            st.markdown("##### 🔬 APIDS Tools (Data Science)")
+            t_apids = st.text_area(
+                "APIDS Tools (comma-separated)",
+                value=st.session_state.get("tools_apids", "Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, Azure MLOps"),
+                key="input_tools_apids",
+                height=75,
+                help="Tools and technologies that will be printed on the certificate for APIDS course."
+            )
+            st.session_state.tools_apids = t_apids
+            if st.button("↺ Reset APIDS Tools to Default", key="reset_tools_apids"):
+                st.session_state.tools_apids = "Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, Azure MLOps"
+                st.rerun()
+
+        with col_tool2:
+            st.markdown("##### 📊 APDA Tools (Data Analytics)")
+            t_apda = st.text_area(
+                "APDA Tools (comma-separated)",
+                value=st.session_state.get("tools_apda", "Excel, SQL, Python, SAS, Tableau, Power BI"),
+                key="input_tools_apda",
+                height=75,
+                help="Tools and technologies that will be printed on the certificate for APDA course."
+            )
+            st.session_state.tools_apda = t_apda
+            if st.button("↺ Reset APDA Tools to Default", key="reset_tools_apda"):
+                st.session_state.tools_apda = "Excel, SQL, Python, SAS, Tableau, Power BI"
+                st.rerun()
+
+        # Display current active tools badge
+        sel_course = st.session_state.selected_official_course
+        active_tools_preview = st.session_state.tools_apda if sel_course == "APDA" else st.session_state.tools_apids
+        st.markdown(
+            f"""
+            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:10px 14px; margin-top:8px; margin-bottom:12px; font-size:13px; color:#1e40af;">
+                <strong>🏷️ Active Certificate Applications Line for {sel_course}:</strong><br>
+                <code>Applications: {active_tools_preview}</code>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
         st.caption(
             f"Active Template File: `assets/templates/certificate_{st.session_state.selected_official_course}_blank.pptx` · "
