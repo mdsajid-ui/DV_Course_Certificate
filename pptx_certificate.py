@@ -233,6 +233,7 @@ def render_certificate_pdf_pillow(
     output_pdf_path: str,
     verify_url: Optional[str] = None,
     tools: Optional[str] = None,
+    projects: Optional[str] = None,
 ):
     """
     Renders the executive DV Analytics certificate with Ivy-league visual hierarchy:
@@ -334,7 +335,10 @@ def render_certificate_pdf_pillow(
             if is_apda
             else "Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, Azure MLOps"
         )
-    proj_text = "Banking, Telecom, Retail, eCommerce, and Healthcare"
+    if projects and str(projects).strip():
+        proj_text = str(projects).strip()
+    else:
+        proj_text = "Banking, Telecom, Retail, eCommerce, and Healthcare"
 
     clean_name = str(name).strip()
     clean_cert = str(certificate_number).strip()
@@ -409,11 +413,17 @@ def render_certificate_pdf_pillow(
     # Projects
     proj_lbl = "Domain Projects: "
     proj_val = proj_text
+    font_projects = font_body_bold
+    proj_pt = 18
     w_plbl = draw.textbbox((0, 0), proj_lbl, font=font_body)[2] - draw.textbbox((0, 0), proj_lbl, font=font_body)[0]
-    w_pval = draw.textbbox((0, 0), proj_val, font=font_body_bold)[2] - draw.textbbox((0, 0), proj_val, font=font_body_bold)[0]
+    w_pval = draw.textbbox((0, 0), proj_val, font=font_projects)[2] - draw.textbbox((0, 0), proj_val, font=font_projects)[0]
+    while (w_plbl + w_pval) > int(W * 0.90) and proj_pt > 11:
+        proj_pt -= 1
+        font_projects = ImageFont.truetype(font_file, proj_pt)
+        w_pval = draw.textbbox((0, 0), proj_val, font=font_projects)[2] - draw.textbbox((0, 0), proj_val, font=font_projects)[0]
     px = (W - (w_plbl + w_pval)) / 2
     draw.text((px, 866), proj_lbl, font=font_body, fill=(75, 75, 75))
-    draw.text((px + w_plbl, 866), proj_val, font=font_body_bold, fill=(20, 20, 20))
+    draw.text((px + w_plbl, 866), proj_val, font=font_projects, fill=(20, 20, 20))
 
     # --- Tier 5: Verification & Registration Ledger ---
     meta_text = f"Certificate Registration Number: {clean_cert}          Date of Completion: {clean_date}"
@@ -530,6 +540,7 @@ def render_certificate_pdf(
     engine: Optional[str] = None,
     verify_url: Optional[str] = None,
     tools: Optional[str] = None,
+    projects: Optional[str] = None,
 ) -> str:
     """
     Fills the official DV Analytics certificate template and produces a final PDF at `output_pdf_path`.
@@ -551,6 +562,7 @@ def render_certificate_pdf(
             output_pdf_path=output_pdf_path,
             verify_url=verify_url,
             tools=tools,
+            projects=projects,
         )
 
     # If external engine requested, try external with automatic fallback to Pillow
@@ -577,5 +589,6 @@ def render_certificate_pdf(
             output_pdf_path=output_pdf_path,
             verify_url=verify_url,
             tools=tools,
+            projects=projects,
         )
 

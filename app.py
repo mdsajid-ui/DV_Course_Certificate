@@ -656,6 +656,7 @@ defaults = {
     "verification_base_url": os.environ.get("CERTIFICATE_VERIFICATION_BASE_URL", "https://mdsajid-ui.github.io/DV_Course_Certificate"),
     "tools_apids": "Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, Azure MLOps",
     "tools_apda": "Excel, SQL, Python, SAS, Tableau, Power BI",
+    "custom_projects": "Banking, Telecom, Retail, eCommerce, and Healthcare",
 }
 
 for k, v in defaults.items():
@@ -731,7 +732,7 @@ OFFICIAL_EMAIL_TEMPLATES = {
         "body": (
             "Dear {{Name}},\n\n"
             "Congratulations on successfully completing the 6-Month Advanced Program in Industrial Data Science (APIDS) at DV Analytics!\n\n"
-            "Over the course of this program, you've built strong expertise in DBMS Programming, Data Analysis & Visualization, and Data Mining — covering Predictive Modeling, Machine Learning, Deep Learning, and Generative AI. You've also gained hands-on experience with {{Tools}}, applying these skills to real-world projects across Banking, Telecom, Retail, eCommerce, and Healthcare.\n\n"
+            "Over the course of this program, you've built strong expertise in DBMS Programming, Data Analysis & Visualization, and Data Mining — covering Predictive Modeling, Machine Learning, Deep Learning, and Generative AI. You've also gained hands-on experience with {{Tools}}, applying these skills to real-world projects across {{Projects}}.\n\n"
             "Please find your Certificate of Completion attached.\n\n"
             "Certificate Registration Number: {{CertNo}}\n"
             "Date of Completion: {{Date}}\n\n"
@@ -747,7 +748,7 @@ OFFICIAL_EMAIL_TEMPLATES = {
         "body": (
             "Dear {{Name}},\n\n"
             "Congratulations on successfully completing the 6-Month Advanced Program in Data Analytics (APDA) at DV Analytics!\n\n"
-            "Throughout the program, you've developed a solid foundation in DBMS Programming, Data Analysis & Visualization, and Data Mining, with hands-on training in {{Tools}} — applied to real-world projects spanning Banking, Telecom, Retail, eCommerce, and Healthcare.\n\n"
+            "Throughout the program, you've developed a solid foundation in DBMS Programming, Data Analysis & Visualization, and Data Mining, with hands-on training in {{Tools}} — applied to real-world projects spanning {{Projects}}.\n\n"
             "Please find your Certificate of Completion attached.\n\n"
             "Certificate Registration Number: {{CertNo}}\n"
             "Date of Completion: {{Date}}\n\n"
@@ -773,6 +774,7 @@ def _apply_email_placeholders(
     mobile: str = "",
     download_url: str = "",
     tools: str = "",
+    projects: str = "",
 ) -> str:
     res = tpl
     res = re.sub(r"\{\{\s*(?:student_)?name\s*\}\}", name, res, flags=re.IGNORECASE)
@@ -782,6 +784,7 @@ def _apply_email_placeholders(
     res = re.sub(r"\{\{\s*(?:mobile|phone|mobile_number)\s*\}\}", mobile, res, flags=re.IGNORECASE)
     res = re.sub(r"\{\{\s*(?:download_link|download_url|certificate_link)\s*\}\}", download_url, res, flags=re.IGNORECASE)
     res = re.sub(r"\{\{\s*(?:tools|technologies|applications)\s*\}\}", tools, res, flags=re.IGNORECASE)
+    res = re.sub(r"\{\{\s*(?:projects|domain_projects|domains)\s*\}\}", projects, res, flags=re.IGNORECASE)
     return res
 
 
@@ -796,6 +799,7 @@ def get_course_email_content(
     student_id: str = "",
     download_url: str = "",
     tools: str = "",
+    projects: str = "",
     custom_subject: Optional[str] = None,
     custom_body: Optional[str] = None,
     use_custom: bool = False,
@@ -826,9 +830,12 @@ def get_course_email_content(
         else:
             tools = st.session_state.get("tools_apids", "Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, Azure MLOps") if hasattr(st, "session_state") and "tools_apids" in st.session_state else "Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, Azure MLOps"
 
+    if not projects:
+        projects = st.session_state.get("custom_projects", "Banking, Telecom, Retail, eCommerce, and Healthcare") if hasattr(st, "session_state") and "custom_projects" in st.session_state else "Banking, Telecom, Retail, eCommerce, and Healthcare"
+
     if use_custom and custom_subject and custom_body:
-        subj = _apply_email_placeholders(custom_subject, name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url, tools=tools)
-        body = _apply_email_placeholders(custom_body, name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url, tools=tools)
+        subj = _apply_email_placeholders(custom_subject, name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url, tools=tools, projects=projects)
+        body = _apply_email_placeholders(custom_body, name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url, tools=tools, projects=projects)
         return subj, body
 
     if "APDA" in c_upper or "ANALYTICS" in c_upper:
@@ -836,8 +843,8 @@ def get_course_email_content(
     else:
         tpl = OFFICIAL_EMAIL_TEMPLATES["APIDS"]
 
-    subj = _apply_email_placeholders(tpl["subject"], name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url, tools=tools)
-    body = _apply_email_placeholders(tpl["body"], name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url, tools=tools)
+    subj = _apply_email_placeholders(tpl["subject"], name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url, tools=tools, projects=projects)
+    body = _apply_email_placeholders(tpl["body"], name=name, course=course, cert_no=cert_no, date=date, mobile=mobile, download_url=download_url, tools=tools, projects=projects)
     return subj, body
 
 
@@ -903,6 +910,7 @@ def build_participant_cert(rec: dict, template_mode: str, default_course: str) -
         else:
             default_tools = st.session_state.get("tools_apids", "Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, Azure MLOps")
         cert_tools = rec.get("Tools") or default_tools
+        cert_projects = rec.get("Projects") or st.session_state.get("custom_projects", "Banking, Telecom, Retail, eCommerce, and Healthcare")
 
         pptx_certificate.render_certificate_pdf(
             name=name,
@@ -913,6 +921,7 @@ def build_participant_cert(rec: dict, template_mode: str, default_course: str) -
             output_pdf_path=pdf_path,
             verify_url=verify_url,
             tools=cert_tools,
+            projects=cert_projects,
         )
     else:
         # Custom image/pdf template
@@ -1023,6 +1032,8 @@ def ensure_cert_pdf_exists(record: cert_store.CertificateRecord) -> Optional[str
         else:
             recon_tools = st.session_state.get("tools_apids", "Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, Azure MLOps") if hasattr(st, "session_state") and "tools_apids" in st.session_state else "Excel, SQL, Python, SAS, Tableau, Power BI, Python ML & Gen AI, Azure MLOps"
 
+        recon_projects = st.session_state.get("custom_projects", "Banking, Telecom, Retail, eCommerce, and Healthcare") if hasattr(st, "session_state") and "custom_projects" in st.session_state else "Banking, Telecom, Retail, eCommerce, and Healthcare"
+
         pptx_certificate.render_certificate_pdf(
             name=record.name,
             certificate_number=cert_no,
@@ -1032,6 +1043,7 @@ def ensure_cert_pdf_exists(record: cert_store.CertificateRecord) -> Optional[str
             output_pdf_path=vault_path,
             verify_url=verify_url,
             tools=recon_tools,
+            projects=recon_projects,
         )
         try:
             from pdf_security import lock_and_protect_pdf
@@ -1117,7 +1129,11 @@ with tab1:
                 m_email = st.text_input("Email ID *", placeholder="e.g. john.doe@example.com")
                 m_cert_no = st.text_input("Certificate Number (Optional)", placeholder="Auto-generated if blank")
 
-            m_tools = st.text_input("🛠️ Custom Tools for Student (Optional)", placeholder="Leave blank to use course default tools")
+            col_tp1, col_tp2 = st.columns(2)
+            with col_tp1:
+                m_tools = st.text_input("🛠️ Custom Tools for Student (Optional)", placeholder="Leave blank to use course default tools")
+            with col_tp2:
+                m_projects = st.text_input("📁 Custom Projects for Student (Optional)", placeholder="Leave blank to use default domain projects")
 
             add_btn = st.form_submit_button("➕ Add Student to Roster", use_container_width=True)
             if add_btn:
@@ -1134,6 +1150,7 @@ with tab1:
                         "Completion Date": m_date.strip(),
                         "Certificate Number": m_cert_no.strip(),
                         "Tools": m_tools.strip(),
+                        "Projects": m_projects.strip(),
                     }
                     existing_idx = next((i for i, r in enumerate(st.session_state.records) if r["Email ID"].lower() == m_email.strip().lower()), None)
                     if existing_idx is not None:
@@ -1148,7 +1165,7 @@ with tab1:
         st.caption("You can directly type into the table below, paste cells, or use the '+' row button at the bottom.")
 
         current_df = pd.DataFrame(st.session_state.records)
-        for col in ["Name", "Mobile Number", "Email ID", "Course", "Completion Date", "Certificate Number", "Tools"]:
+        for col in ["Name", "Mobile Number", "Email ID", "Course", "Completion Date", "Certificate Number", "Tools", "Projects"]:
             if col not in current_df.columns:
                 current_df[col] = ""
 
@@ -1166,6 +1183,7 @@ with tab1:
                 "Completion Date": st.column_config.TextColumn("Completion Date", default=datetime.now().strftime("%d-%b-%Y")),
                 "Certificate Number": st.column_config.TextColumn("Certificate Number (Optional)"),
                 "Tools": st.column_config.TextColumn("Tools (Optional)", help="Overrides course default tools"),
+                "Projects": st.column_config.TextColumn("Projects (Optional)", help="Overrides default domain projects"),
             },
         )
 
@@ -1183,6 +1201,7 @@ with tab1:
                         "Completion Date": str(row.get("Completion Date", "")).strip() if str(row.get("Completion Date", "")).lower() not in ("nan", "none") else datetime.now().strftime("%d-%b-%Y"),
                         "Certificate Number": str(row.get("Certificate Number", "")).strip() if str(row.get("Certificate Number", "")).lower() not in ("nan", "none") else "",
                         "Tools": str(row.get("Tools", "")).strip() if str(row.get("Tools", "")).lower() not in ("nan", "none") else "",
+                        "Projects": str(row.get("Projects", "")).strip() if str(row.get("Projects", "")).lower() not in ("nan", "none") else "",
                     })
             st.session_state.records = cleaned_records
             st.success(f"✓ Saved {len(cleaned_records)} participants to active roster.")
@@ -1195,8 +1214,8 @@ with tab1:
         sample_col, _ = st.columns([1, 2])
         with sample_col:
             sample_data = pd.DataFrame([
-                {"Name": "Aarav Sharma", "Mobile Number": "+91 9876543210", "Email ID": "aarav.sharma@example.com", "Course": "APIDS", "Completion Date": "15-May-2026"},
-                {"Name": "Ananya Patel", "Mobile Number": "+91 9812345678", "Email ID": "ananya.patel@example.com", "Course": "APDA", "Completion Date": "15-May-2026"},
+                {"Name": "Aarav Sharma", "Mobile Number": "+91 9876543210", "Email ID": "aarav.sharma@example.com", "Course": "APIDS", "Completion Date": "15-May-2026", "Tools": "Excel, SQL, Python, Tableau", "Projects": "Banking, Telecom, Retail"},
+                {"Name": "Ananya Patel", "Mobile Number": "+91 9812345678", "Email ID": "ananya.patel@example.com", "Course": "APDA", "Completion Date": "15-May-2026", "Tools": "Excel, SQL, Tableau, Power BI", "Projects": "Healthcare, eCommerce"},
             ])
             sample_buffer = io.BytesIO()
             sample_data.to_excel(sample_buffer, index=False)
@@ -1412,6 +1431,38 @@ with tab1:
             <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:10px 14px; margin-top:8px; margin-bottom:12px; font-size:13px; color:#1e40af;">
                 <strong>🏷️ Active Certificate Applications Line for {sel_course}:</strong><br>
                 <code>Applications: {active_tools_preview}</code>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # ------------------ Domain Projects Customization ------------------
+        st.markdown("---")
+        st.markdown("#### 📁 Domain Projects Options (Projects on Certificate)")
+        st.caption("Customize the domains / projects printed under **'Domain Projects:'** on the certificate and included in the completion emails.")
+
+        col_proj1, col_proj2 = st.columns([3, 1])
+        with col_proj1:
+            p_custom = st.text_area(
+                "Domain Projects (comma-separated)",
+                value=st.session_state.get("custom_projects", "Banking, Telecom, Retail, eCommerce, and Healthcare"),
+                key="input_custom_projects",
+                height=75,
+                help="Domain projects that will be printed on the certificate under 'Domain Projects:'."
+            )
+            st.session_state.custom_projects = p_custom
+        with col_proj2:
+            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+            if st.button("↺ Reset Projects to Default", key="reset_custom_projects", use_container_width=True):
+                st.session_state.custom_projects = "Banking, Telecom, Retail, eCommerce, and Healthcare"
+                st.rerun()
+
+        # Display current active projects badge
+        st.markdown(
+            f"""
+            <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:10px 14px; margin-top:8px; margin-bottom:12px; font-size:13px; color:#166534;">
+                <strong>🏷️ Active Certificate Domain Projects Line:</strong><br>
+                <code>Domain Projects: {st.session_state.custom_projects}</code>
             </div>
             """,
             unsafe_allow_html=True,
@@ -2023,7 +2074,7 @@ with tab3:
             email_subj = st.text_input("Custom Email Subject", key="email_subject_tpl")
         with col_em2:
             st.markdown(
-                "**Available Tags:** &nbsp; `{{Name}}` &nbsp; `{{Course}}` &nbsp; `{{CertNo}}` &nbsp; `{{Date}}` &nbsp; `{{Mobile}}`",
+                "**Available Tags:** &nbsp; `{{Name}}` &nbsp; `{{Course}}` &nbsp; `{{CertNo}}` &nbsp; `{{Date}}` &nbsp; `{{Mobile}}` &nbsp; `{{Tools}}` &nbsp; `{{Projects}}`",
                 unsafe_allow_html=True,
             )
         email_body = st.text_area("Custom Email Body", height=180, key="email_body_tpl")
@@ -2044,6 +2095,8 @@ with tab3:
                 cert_no=sample_cert,
                 date=sample_date,
                 mobile=sample_mob,
+                tools=sample_rec.get("Tools"),
+                projects=sample_rec.get("Projects"),
                 custom_subject=st.session_state.get("email_subject_tpl"),
                 custom_body=st.session_state.get("email_body_tpl"),
                 use_custom=(em_mode != "⚡ Automatic Course-Adaptive (Official APIDS & APDA Content)"),
@@ -2150,6 +2203,8 @@ with tab3:
                 mobile=mobile,
                 email=email,
                 student_id=str(student_id_val),
+                tools=rec.get("Tools"),
+                projects=rec.get("Projects"),
                 custom_subject=st.session_state.get("email_subject_tpl"),
                 custom_body=st.session_state.get("email_body_tpl"),
                 use_custom=(st.session_state.get("email_composer_mode") == "✏️ Custom Template Editor"),

@@ -134,3 +134,22 @@ def test_render_certificate_pdf_with_custom_tools(tmp_path):
     )
     assert out_path.exists()
     assert out_path.stat().st_size > 10_000
+
+
+def test_render_certificate_pdf_with_custom_projects(tmp_path):
+    qr_path = tmp_path / "qr_proj.png"
+    qr_path.write_bytes(qr_utils.make_qr_image_bytes("https://example.com/verify/DVA-APDA-2026-000777"))
+    out_path = tmp_path / "cert_custom_projects.pdf"
+
+    custom_projects = "Fintech, EdTech, Supply Chain, and Autonomous Vehicles"
+    pc.render_certificate_pdf(
+        name="Rohit Sharma",
+        certificate_number="DVA-APDA-2026-000777",
+        completion_date="25-Sep-2026",
+        qr_png_path=str(qr_path),
+        output_pdf_path=str(out_path),
+        projects=custom_projects,
+    )
+    assert out_path.exists()
+    assert out_path.stat().st_size > 10_000
+
